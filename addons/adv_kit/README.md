@@ -3,10 +3,10 @@
 Godot 4.7 向けの ADV（ノベルゲーム）共通パッケージ（4.5 でも動作を確認済み）。
 シナリオのデータモデル、JSON パーサ、検証、最小の再生ランタイムを提供する。
 
-> **現在のフェーズ: phase-04 (auto-direction)**
+> **現在のフェーズ: phase-05 (topics-choices-and-progress)**
 > 立ち絵付きの行をタイプライタ表示してテキスト送りでき、揺れ・フェード・立ち絵の
 > 登場／退場／移動・SE・BGM・ボイスが動きます。話者交代時の非話者ダークとホップも
-> 設定で制御できます。選択肢と話題遷移は後続フェーズです。
+> 設定で制御できます。選択肢・話題遷移・フラグ・既読・進行復元にも対応しています。
 
 ---
 
@@ -19,9 +19,11 @@ Godot 4.7 向けの ADV（ノベルゲーム）共通パッケージ（4.5 で�
 | `AdvCondition` | `condition` 文字列の構文検証と評価 |
 | `AdvEffectSchema` | 演出パラメータの型・既定値表と型変換 |
 | `AdvParseResult` / `AdvIssue` | 結果と問題の1件 |
+| `AdvProgressState` | topic / step UID / フラグ / 既読集合の Node 非依存状態 |
 | `AdvPlayer` | 進行制御。演出の起動と BLOCKING の完了待ち |
 | `AdvEffectHandler` / `AdvEffectContext` | 演出の拡張点と実行文脈 |
 | `AdvAudioDirector` / `AdvVoicePlayer` | SE / BGM / ボイスのチャンネル |
+| `AdvChoiceMenu` | ゲーム側が外観を実装する選択肢 UI の基底クラス |
 
 ### 最短の使い方
 
@@ -80,6 +82,38 @@ settings.typing_speed = 40.0
 adv_scene.player.setup(result.book, settings)
 adv_scene.player.play_topic(&"prologue_01")
 ```
+
+### 選択肢と話題遷移
+
+`AdvScene.tscn` には無装飾の `PlainChoiceMenu` が参照実装として接続されています。
+ゲーム側では `AdvChoiceMenu` を継承したシーンを `player.choice_menu` に設定してください。
+条件式が真の選択肢だけが `present()` に渡されます。
+
+```gdscript
+adv_scene.player.choice_selected.connect(_on_choice_selected)
+
+func _on_choice_selected(_index: int, _option: Dictionary) -> void:
+    pass # flag は選択前に設定済み。goto があれば自動で次の topic へ進む
+```
+
+テスト用 UI や独自の入力から選ぶ場合は `choose_option(index)` を呼べます。
+選択肢の `goto` が空なら現在の topic を続け、指定があれば同じ Book 内の topic へ遷移します。
+`jump` の条件が偽の場合は、その step だけを素通りします。
+
+### 既読と進行データ
+
+line がタイプライタ完了した時点で `uid` が既読になります。`get_progress()` はゲーム側の
+Autoload などで `user://` に保存し、`restore_progress()` へ渡してください。Kit はファイルへ
+直接書き込みません。
+
+```gdscript
+var progress: Dictionary = adv_scene.player.get_progress()
+# progress: {topic_id, step_uid, flags, read_steps, portrait_states}
+adv_scene.player.restore_progress(progress) # 現在の Book の保存位置から再生
+```
+
+`step_index` は保存しません。`portrait_states` には現在表示中のキャラクターの pose /
+expression / slot / modulate が含まれ、旧形式でこのキーが無いデータも復元できます。
 
 `AdvScene` の標準構成は `ShakeRoot`（背景＋ステージ）、`FadeLayer`、
 `MessageWindow`、`AdvPlayer` です。入力アクション `adv_advance`（マウス左・
@@ -192,10 +226,9 @@ adv_scene.player.register_effect(&"flash", MyFlashEffect.new())
   自動的に解除されますが、タイトル画面のクリックなどで先に解除したい場合は
   `AdvPlayer.unlock_audio()` を呼んでください。
 
-### phase-04 の制限
+### phase-05 の制限
 
-- `AdvChoiceStep` と `AdvJumpStep` は警告を出して素通りします（phase-05）。
-- オート・スキップ・バックログ・セーブは未実装です（phase-05 / 06）。
+- オート・本格的なスキップ・バックログは未実装です（phase-06）。
   `AdvEffectHandler.apply_final()` は実装済みですが、呼び出し側はまだありません。
 - 立ち絵テクスチャと音源は使う直前に遅延ロードされます。
   パスが空または存在しない場合も、警告だけ出して進行します。
@@ -267,13 +300,16 @@ godot --headless --script res://addons/adv_kit/tests/test_effects.gd
 
 # 5) phase-04 の話者交代演出テスト
 godot --headless --script res://addons/adv_kit/tests/test_auto_direction.gd
+
+# 6) phase-05 の選択肢・進行状態テスト
+godot --headless --script res://addons/adv_kit/tests/test_progress.gd
 ```
 
 **`--import` を飛ばすと `class_name` が解決できずスクリプトが起動しない。**
 `.godot/global_script_class_cache.cfg` が生成されていない状態では、
 `--script` で起動したスクリプトからグローバルクラスを参照できないため。
 
-CI では 1) → 2) → 3) → 4) → 5) の順に必ず全部走らせる。
+CI では 1) → 2) → 3) → 4) → 5) → 6) の順に必ず全部走らせる。
 **判定は終了コードで行うこと。** 終了時に出る `ObjectDB instances leaked` /
 `resources still in use` は `AdvStep` の型自己参照による既知のもので、
 終了コードには影響しない（仕様書 §4.3）。
@@ -282,7 +318,6 @@ CI では 1) → 2) → 3) → 4) → 5) の順に必ず全部走らせる。
 
 ## この時点で意図的にやっていないこと
 
-- 選択肢・話題遷移・フラグ・既読・セーブ（phase-05）
 - オート・本格的なスキップ・バックログ（phase-06）
 - `.tres` の書き出し（`ResourceSaver` を呼ばない）
 - 立ち絵テクスチャのインポート時検査（phase-07）
@@ -304,6 +339,7 @@ addons/adv_kit/
     adv_effect_schema.gd
     adv_scenario_parser.gd
     adv_scenario_validator.gd
+    adv_progress_state.gd
   resources/
     adv_character.gd  adv_portrait_set.gd
     adv_step.gd       adv_line_step.gd   adv_effect_step.gd
@@ -311,7 +347,7 @@ addons/adv_kit/
     adv_topic.gd  adv_scenario_book.gd  adv_kit_settings.gd
   ui/
     adv_scene.tscn / .gd  adv_stage.tscn / .gd
-    adv_portrait.tscn / .gd  adv_message_window.gd
+    adv_portrait.tscn / .gd  adv_message_window.gd  adv_choice_menu.gd
   runtime/
     adv_player.gd            # 進行制御
     adv_effect_context.gd    # 演出の実行文脈と排他ターゲットの Tween 台帳
@@ -323,9 +359,10 @@ addons/adv_kit/
       adv_portrait_effect.gd adv_audio_effect.gd
   samples/ui/
     plain_message_window.tscn / .gd
+    plain_choice_menu.tscn / .gd
   samples/sample_scenario.json
   tests/
-    test_scenario_parse.gd  test_playback.gd  test_effects.gd  test_auto_direction.gd
+    test_scenario_parse.gd  test_playback.gd  test_effects.gd  test_auto_direction.gd  test_progress.gd
     assets/test_tone.tres    # テスト専用の極小 WAV（実素材の代わり）
 ```
 

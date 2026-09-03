@@ -1,9 +1,10 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://addons/adv_kit/ui/adv_scene.gd" id="1_scene"]
 [ext_resource type="Script" path="res://addons/adv_kit/ui/adv_stage.gd" id="2_stage"]
 [ext_resource type="Script" path="res://addons/adv_kit/runtime/adv_player.gd" id="3_player"]
 [ext_resource type="PackedScene" path="res://addons/adv_kit/samples/ui/plain_message_window.tscn" id="4_message"]
+[ext_resource type="PackedScene" path="res://addons/adv_kit/samples/ui/plain_choice_menu.tscn" id="5_choice"]
 
 [node name="AdvScene" type="Control" node_paths=PackedStringArray("player")]
 layout_mode = 3
@@ -62,10 +63,19 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="AdvPlayer" type="Node" parent="." node_paths=PackedStringArray("stage", "message_window", "shake_root", "fade_layer")]
+[node name="ChoiceMenu" parent="." instance=ExtResource("5_choice")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="AdvPlayer" type="Node" parent="." node_paths=PackedStringArray("stage", "message_window", "choice_menu", "shake_root", "fade_layer")]
 layout_mode = 0
 script = ExtResource("3_player")
 stage = NodePath("../ShakeRoot/Stage")
 message_window = NodePath("../MessageWindow")
+choice_menu = NodePath("../ChoiceMenu")
 shake_root = NodePath("../ShakeRoot")
 fade_layer = NodePath("../FadeLayer")

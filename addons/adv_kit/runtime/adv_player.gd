@@ -1,14 +1,16 @@
 class_name AdvPlayer
 extends Node
-## シナリオの再生制御（phase-04）。
+## シナリオの再生制御（phase-05）。
 ##
 ## 扱うのは line の表示・送り、[b]汎用演出（§8）[/b]、
 ## [b]局所演出（§7）とボイス（§9.4）[/b]。
-## 選択肢・話題遷移・フラグ（phase-05）、オート／スキップ／バックログ（phase-06）は
-## まだ持たない。該当ステップは警告を出して素通りする。
+## 選択肢・話題遷移・フラグ・既読・進行保存（§9.1）までを扱う。
+## オート／スキップ／バックログ（phase-06）はまだ持たない。
 
 @export var stage: AdvStage
 @export var message_window: AdvMessageWindow
+## 選択肢表示 UI。未接続でも choice_presented signal は発火する。
+@export var choice_menu: AdvChoiceMenu
 ## 画面揺れの対象（仕様書 §5.1）。未接続でも shake が無効になるだけで進行は止まらない。
 @export var shake_root: Control
 ## フェード用の最前面レイヤ。未接続でも fade が無効になるだけ。
@@ -18,6 +20,9 @@ signal topic_started(topic_id: StringName)
 signal topic_finished(topic_id: StringName)
 signal step_shown(topic_id: StringName, step_uid: StringName)
 signal line_completed(topic_id: StringName, step_uid: StringName)
+signal choice_presented(options: Array)
+signal choice_selected(index: int, option: Dictionary)
+signal flag_changed(flag_name: String, value: bool)
 signal scenario_finished()
 
 var _book: AdvScenarioBook = null
@@ -31,6 +36,12 @@ var _is_busy: bool = false
 var _typing_tween: Tween = null
 var _typing_topic_id: StringName = &""
 var _typing_step_uid: StringName = &""
+
+var _progress: AdvProgressState = AdvProgressState.new()
+var _is_choice_open: bool = false
+var _choice_options: Array[Dictionary] = []
+var _choice_topic_id: StringName = &""
+var _choice_step_uid: StringName = &""
 
 ## play_topic() / stop() のたびに増える。await をまたいだ古い進行を捨てるための世代番号。
 var _run_id: int = 0
@@ -56,6 +67,7 @@ var _last_speaker_id: StringName = &""
 func _ready() -> void:
 	_ensure_audio_nodes()
 	_connect_message_window()
+	_connect_choice_menu()
 
 
 ## Book と再生設定を差し替え、表示状態を初期化する。
@@ -64,6 +76,7 @@ func setup(p_book: AdvScenarioBook, p_settings: AdvKitSettings) -> void:
 	stop()
 	_book = p_book
 	_settings = p_settings if p_settings != null else AdvKitSettings.new()
+	_progress = AdvProgressState.new()
 	_current_poses.clear()
 	_current_expressions.clear()
 	_current_slots.clear()
@@ -73,10 +86,13 @@ func setup(p_book: AdvScenarioBook, p_settings: AdvKitSettings) -> void:
 	_build_context()
 	_voice.setup(_settings.voice_bus)
 	_connect_message_window()
+	_connect_choice_menu()
 	if stage != null:
 		stage.clear()
 	if message_window != null:
 		message_window.clear()
+	if choice_menu != null:
+		choice_menu.close()
 
 
 ## topic を先頭から再生する。存在しない topic はエラーにして何もしない。
@@ -90,20 +106,14 @@ func play_topic(p_topic_id: StringName) -> void:
 		return
 
 	stop()
-	_current_topic = topic
-	_current_topic_id = p_topic_id
-	_step_cursor = -1
-	_last_speaker_id = &""
-	_is_playing = true
-	topic_started.emit(_current_topic_id)
-	_process_next_step()
+	_start_topic(topic, p_topic_id, -1)
 
 
 ## 表示中なら全文を表示し、表示済みなら次のステップへ進む。
 ## [b]BLOCKING 演出の実行中は受け付けない。[/b]
 func advance() -> void:
 	unlock_audio()
-	if not _is_playing or _is_busy:
+	if not _is_playing or _is_busy or _is_choice_open:
 		return
 	if _is_typing:
 		skip_typing()
@@ -119,11 +129,77 @@ func skip_typing() -> void:
 	_complete_typing()
 
 
+## 現在選択肢を表示して入力を待っているか。
+func is_choice_open() -> bool:
+	return _is_choice_open
+
+
+## 選択肢を外部から選ぶ。ChoiceMenu が無い構成やテスト用 UI でも利用できる。
+func choose_option(p_index: int) -> void:
+	_on_option_chosen(p_index)
+
+
+## 現在のフラグを設定する。実際に値が変化したときだけ signal を発火する。
+func set_flag(p_flag_name: String, p_value: bool) -> void:
+	if _progress.set_flag(p_flag_name, p_value):
+		flag_changed.emit(p_flag_name.strip_edges(), p_value)
+
+
+func has_flag(p_flag_name: String) -> bool:
+	return _progress.has_flag(p_flag_name)
+
+
+func is_step_read(p_step_uid: StringName) -> bool:
+	return _progress.is_step_read(p_step_uid)
+
+
+## 現在の論理進行と、表示中の立ち絵状態を保存用辞書へ変換する。
+func get_progress() -> Dictionary:
+	var result: Dictionary = _progress.to_dictionary()
+	result["portrait_states"] = _get_portrait_states()
+	return result
+
+
+## 保存データを復元し、現在の Book があれば保存位置から再生する。
+## 保存データの書き込み自体はゲーム側が担当する。
+func restore_progress(p_data: Dictionary) -> void:
+	if p_data == null:
+		return
+	_stop_playback()
+	_progress.restore_from_dictionary(p_data)
+	_restore_portrait_states(p_data.get("portrait_states", null))
+
+	if _book == null:
+		return
+	var topic_id: StringName = _progress.get_topic_id()
+	if String(topic_id).is_empty():
+		return
+	var topic: AdvTopic = _book.get_topic(topic_id)
+	if topic == null:
+		push_warning("AdvPlayer.restore_progress(): topic が見つかりません: %s" % topic_id)
+		return
+	var step_index: int = -1
+	var step_uid: StringName = _progress.get_step_uid()
+	if not String(step_uid).is_empty():
+		var step: AdvStep = topic.find_step_by_uid(step_uid)
+		if step == null:
+			push_warning(
+				"AdvPlayer.restore_progress(): step_uid が見つかりません: %s" % step_uid)
+		else:
+			step_index = step.step_index
+	_start_topic(topic, topic_id, step_index - 1)
+
+
 ## 再生を中断する。走っている演出・音・Tween をすべて止める。
 ## シーン遷移や Stage の破棄はゲーム側が行う。
 func stop() -> void:
+	_stop_playback()
+
+
+func _stop_playback() -> void:
 	_run_id += 1
 	_kill_typing_tween()
+	_close_choice_menu()
 	if _context != null:
 		_context.kill_all()
 	if _audio != null:
@@ -199,6 +275,17 @@ func get_effect_context() -> AdvEffectContext:
 
 # --- 進行制御 ---------------------------------------------------------------
 
+func _start_topic(p_topic: AdvTopic, p_topic_id: StringName, p_cursor: int) -> void:
+	_current_topic = p_topic
+	_current_topic_id = p_topic_id
+	_step_cursor = p_cursor
+	_last_speaker_id = &""
+	_is_playing = true
+	_is_busy = false
+	_progress.set_position(p_topic_id, &"")
+	topic_started.emit(_current_topic_id)
+	_process_next_step()
+
 ## 次に「入力待ちになる状態」まで進める。
 ## BLOCKING 演出に当たった場合はそこで await するため、この関数はコルーチンになる。
 func _process_next_step() -> void:
@@ -215,15 +302,16 @@ func _process_next_step() -> void:
 		if step == null:
 			continue
 
+		_progress.set_position(_current_topic_id, step.uid)
+		step_shown.emit(_current_topic_id, step.uid)
+		_start_parallel_effects(step)
+
 		if step is AdvLineStep:
 			_show_line(step as AdvLineStep)
 			return
 
-		step_shown.emit(_current_topic_id, step.uid)
-
 		var effect: AdvEffectStep = step as AdvEffectStep
 		if effect != null:
-			_start_parallel_effects(effect)
 			if effect.is_parallel():
 				# 畳み込み漏れ。起動だけして次へ進む（検証は dangling_parallel の担当）。
 				_play_effect(effect)
@@ -235,6 +323,21 @@ func _process_next_step() -> void:
 				return
 			if effect.auto_advance:
 				continue
+			return
+
+		var choice: AdvChoiceStep = step as AdvChoiceStep
+		if choice != null:
+			_present_choice(choice)
+			return
+
+		var jump: AdvJumpStep = step as AdvJumpStep
+		if jump != null:
+			if not AdvCondition.evaluate(jump.condition, _progress.get_flags()):
+				continue
+			if String(jump.goto).is_empty():
+				_finish_topic()
+				return
+			_transition_to_topic(jump.goto)
 			return
 
 		_warn_unimplemented_step(step)
@@ -251,9 +354,6 @@ func _show_line(p_line: AdvLineStep) -> void:
 		else:
 			speaker_name = character.display_name
 			name_color = character.name_color
-
-	# PARALLEL 演出は本文と同時に走り出す。完了は待たない（仕様書 §4.3）。
-	_start_parallel_effects(p_line)
 
 	if character != null:
 		var pose: StringName = _resolve_pose(character, p_line.pose)
@@ -280,8 +380,67 @@ func _show_line(p_line: AdvLineStep) -> void:
 
 	_typing_topic_id = _current_topic_id
 	_typing_step_uid = p_line.uid
-	step_shown.emit(_current_topic_id, p_line.uid)
 	_begin_typing(p_line.text)
+
+
+func _present_choice(p_choice: AdvChoiceStep) -> void:
+	var visible_options: Array[Dictionary] = []
+	for option: Dictionary in p_choice.options:
+		var condition: String = str(option.get(AdvChoiceStep.KEY_CONDITION, ""))
+		if not AdvCondition.evaluate(condition, _progress.get_flags()):
+			continue
+		visible_options.append(option.duplicate(true))
+
+	_choice_options = visible_options
+	_choice_topic_id = _current_topic_id
+	_choice_step_uid = p_choice.uid
+	_is_choice_open = true
+	_is_busy = true
+	if choice_menu != null:
+		choice_menu.present(p_choice.prompt, visible_options)
+	else:
+		push_warning("AdvPlayer: choice_menu が未接続です。choose_option() または signal を使ってください")
+	choice_presented.emit(visible_options)
+
+	# 条件で全選択肢が隠れた場合でも、プレイを停止させない。
+	if visible_options.is_empty():
+		push_warning("AdvPlayer: 表示可能な選択肢がありません。choice を素通りします")
+		_close_choice_menu()
+		_is_busy = false
+		_process_next_step()
+
+
+func _on_option_chosen(p_index: int) -> void:
+	if not _is_choice_open or p_index < 0 or p_index >= _choice_options.size():
+		return
+	if _choice_topic_id != _current_topic_id or _choice_step_uid != _progress.get_step_uid():
+		return
+	unlock_audio()
+	var option: Dictionary = _choice_options[p_index]
+	var goto: StringName = StringName(str(option.get(AdvChoiceStep.KEY_GOTO, "")))
+	var flag_name: String = str(option.get(AdvChoiceStep.KEY_FLAG, ""))
+	_close_choice_menu()
+	_is_busy = false
+	if not flag_name.strip_edges().is_empty():
+		set_flag(flag_name, true)
+	choice_selected.emit(p_index, option)
+	if not String(goto).is_empty():
+		_transition_to_topic(goto)
+		return
+	_process_next_step()
+
+
+func _transition_to_topic(p_topic_id: StringName) -> void:
+	if _book == null:
+		_finish_topic()
+		return
+	var topic: AdvTopic = _book.get_topic(p_topic_id)
+	if topic == null:
+		push_warning("AdvPlayer: goto の topic が見つかりません: %s" % p_topic_id)
+		_finish_topic()
+		return
+	_finish_topic(false)
+	_start_topic(topic, p_topic_id, -1)
 
 
 ## このステップに畳み込まれた PARALLEL 演出を一斉に起動する。完了は待たない。
@@ -447,6 +606,7 @@ func _complete_typing() -> void:
 	_kill_typing_tween()
 	if message_window != null:
 		message_window.complete_typing()
+	_progress.mark_step_read(_typing_step_uid)
 	line_completed.emit(_typing_topic_id, _typing_step_uid)
 
 
@@ -456,13 +616,14 @@ func _kill_typing_tween() -> void:
 	_typing_tween = null
 
 
-func _finish_topic() -> void:
+func _finish_topic(p_emit_scenario_finished: bool = true) -> void:
 	if not _is_playing:
 		return
 	var finished_topic_id: StringName = _current_topic_id
 	_is_playing = false
 	_is_typing = false
 	_is_busy = false
+	_close_choice_menu()
 	_kill_typing_tween()
 	_current_topic = null
 	_current_topic_id = &""
@@ -472,7 +633,8 @@ func _finish_topic() -> void:
 	if message_window != null:
 		message_window.clear()
 	topic_finished.emit(finished_topic_id)
-	scenario_finished.emit()
+	if p_emit_scenario_finished:
+		scenario_finished.emit()
 
 
 func _warn_unimplemented_step(p_step: AdvStep) -> void:
@@ -480,7 +642,7 @@ func _warn_unimplemented_step(p_step: AdvStep) -> void:
 	if not p_step.parallel_effects.is_empty():
 		suffix = "。parallel_effects は再生済み"
 	push_warning(
-		"AdvPlayer: %s は phase-03 では素通りします%s（phase-05 で実装予定）" % [
+		"AdvPlayer: 未対応のステップ %s を素通りします%s" % [
 			p_step.describe(), suffix])
 
 
@@ -521,6 +683,70 @@ func _build_context() -> void:
 		push_warning("AdvPlayer: shake_root が未接続です。shake 演出は無効になります")
 	if fade_layer == null:
 		push_warning("AdvPlayer: fade_layer が未接続です。fade 演出は無効になります")
+
+
+# --- 立ち絵を含む進行データ -----------------------------------------------
+
+func _get_portrait_states() -> Dictionary:
+	var result: Dictionary = {}
+	if stage == null:
+		return result
+	for character_id: StringName in stage.get_character_ids():
+		var portrait: AdvPortrait = stage.get_portrait(character_id)
+		if portrait == null:
+			continue
+		result[String(character_id)] = {
+			"pose": String(stage.get_character_pose(character_id)),
+			"expression": String(stage.get_character_expression(character_id)),
+			"slot": String(stage.get_character_slot(character_id)),
+			"modulate": [
+				portrait.modulate.r,
+				portrait.modulate.g,
+				portrait.modulate.b,
+				portrait.modulate.a,
+			],
+		}
+	return result
+
+
+func _restore_portrait_states(p_raw_states: Variant) -> void:
+	if not (p_raw_states is Dictionary) or stage == null or _book == null:
+		return
+	var states: Dictionary = p_raw_states as Dictionary
+	stage.clear()
+	_current_poses.clear()
+	_current_expressions.clear()
+	_current_slots.clear()
+	for raw_id: Variant in states.keys():
+		var character_id: StringName = StringName(str(raw_id))
+		var character: AdvCharacter = _book.get_character(character_id)
+		if character == null:
+			push_warning(
+				"AdvPlayer.restore_progress(): portrait の character が見つかりません: %s" %
+				character_id)
+			continue
+		var raw_state: Variant = states[raw_id]
+		if not (raw_state is Dictionary):
+			continue
+		var state: Dictionary = raw_state as Dictionary
+		var pose: StringName = StringName(str(state.get("pose", "")))
+		var expression: StringName = StringName(str(state.get("expression", "")))
+		var slot: StringName = StringName(str(state.get("slot", "center")))
+		_current_poses[character_id] = pose
+		_current_expressions[character_id] = expression
+		_current_slots[character_id] = slot
+		stage.show_character(character, pose, expression, slot, 0.0)
+		var portrait: AdvPortrait = stage.get_portrait(character_id)
+		if portrait == null:
+			continue
+		var raw_modulate: Variant = state.get("modulate", null)
+		if raw_modulate is Array and (raw_modulate as Array).size() >= 4:
+			var modulate_values: Array = raw_modulate as Array
+			portrait.modulate = Color(
+				float(modulate_values[0]),
+				float(modulate_values[1]),
+				float(modulate_values[2]),
+				float(modulate_values[3]))
 
 
 ## 音声ノードは AdvPlayer 自身の子として持つ。
@@ -579,6 +805,22 @@ func _connect_message_window() -> void:
 		message_window.advance_requested.connect(_on_advance_requested)
 	if not message_window.skip_typing_requested.is_connected(_on_skip_typing_requested):
 		message_window.skip_typing_requested.connect(_on_skip_typing_requested)
+
+
+func _connect_choice_menu() -> void:
+	if choice_menu == null:
+		return
+	if not choice_menu.option_chosen.is_connected(_on_option_chosen):
+		choice_menu.option_chosen.connect(_on_option_chosen)
+
+
+func _close_choice_menu() -> void:
+	if choice_menu != null and _is_choice_open:
+		choice_menu.close()
+	_is_choice_open = false
+	_choice_options.clear()
+	_choice_topic_id = &""
+	_choice_step_uid = &""
 
 
 func _on_advance_requested() -> void:

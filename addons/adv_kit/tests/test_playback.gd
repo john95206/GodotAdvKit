@@ -88,6 +88,10 @@ func _initialize() -> void:
 	var frame_guard: int = 0
 	while player.is_playing() and advance_count < 32 and frame_guard < 600:
 		frame_guard += 1
+		if player.is_choice_open():
+			player.choose_option(0)
+			await process_frame
+			continue
 		if player.is_busy():
 			await process_frame
 			continue
@@ -97,9 +101,9 @@ func _initialize() -> void:
 	_check(not player.is_playing(), "サンプル topic を最後まで送れる")
 	_check(advance_count < 32, "非 line ステップで停止しない")
 	_check(frame_guard < 600, "演出の完了待ちが無限にならない")
-	_check(_step_shown_count == 7, "畳み込み後 7 ステップすべてで step_shown が出る")
-	_check(_line_completed_count == 4, "line 4 行が完了する")
-	_check(_topic_finished_count == 1, "topic_finished が 1 回出る")
+	_check(_step_shown_count == 16, "遷移した 3 topic の全 16 ステップで step_shown が出る")
+	_check(_line_completed_count == 8, "遷移した 3 topic の line 8 行が完了する")
+	_check(_topic_finished_count == 3, "topic_finished が 3 回出る")
 	_check(_scenario_finished_count == 1, "scenario_finished が 1 回出る")
 	_check(stage.has_character(&"yuu"), "地の文と非 line で yuu が残る")
 	_check(stage.has_character(&"rin"), "rin の line で rin が登場する")
