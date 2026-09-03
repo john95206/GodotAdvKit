@@ -15,7 +15,7 @@ Godot 4.7 向けの **ADV（ノベルゲーム）共通パッケージ**と、�
 > git の差分に出たら、それはバージョンを行き来した印です。
 | レンダラー | **Compatibility**（Web / unityroom 前提） |
 | 言語 | GDScript（静的型付け必須） |
-| 現在のフェーズ | **phase-05 完了 / phase-06 未着手** |
+| 現在のフェーズ | **phase-06 完了 / phase-07 未着手** |
 
 ## このリポジトリの構成
 
@@ -64,6 +64,9 @@ godot --headless --script res://addons/adv_kit/tests/test_auto_direction.gd
 
 # phase-05: 選択肢・進行状態テスト
 godot --headless --script res://addons/adv_kit/tests/test_progress.gd
+
+# phase-06: オート・スキップ・バックログテスト
+godot --headless --script res://addons/adv_kit/tests/test_play_assist.gd
 ```
 
 > **Windows で CLI から叩くときは `_console.exe` の方を使うこと。**

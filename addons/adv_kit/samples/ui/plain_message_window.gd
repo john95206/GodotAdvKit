@@ -52,16 +52,6 @@ func _gui_input(p_event: InputEvent) -> void:
 		accept_event()
 
 
-func _unhandled_input(p_event: InputEvent) -> void:
-	if p_event.is_action_pressed(&"adv_skip"):
-		skip_typing_requested.emit()
-		get_viewport().set_input_as_handled()
-		return
-	if p_event.is_action_pressed(&"adv_advance"):
-		advance_requested.emit()
-		get_viewport().set_input_as_handled()
-
-
 func _ensure_message_nodes() -> bool:
 	if _speaker_label == null:
 		_speaker_label = get_node_or_null("SpeakerLabel") as Label

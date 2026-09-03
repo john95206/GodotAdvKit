@@ -1,16 +1,18 @@
 class_name AdvPlayer
 extends Node
-## シナリオの再生制御（phase-05）。
+## シナリオの再生制御（phase-06）。
 ##
 ## 扱うのは line の表示・送り、[b]汎用演出（§8）[/b]、
 ## [b]局所演出（§7）とボイス（§9.4）[/b]。
-## 選択肢・話題遷移・フラグ・既読・進行保存（§9.1）までを扱う。
-## オート／スキップ／バックログ（phase-06）はまだ持たない。
+## 選択肢・話題遷移・フラグ・既読・進行保存（§9.1）と、
+## オート・スキップ・バックログ（§9.2〜§9.5）を扱う。
 
 @export var stage: AdvStage
 @export var message_window: AdvMessageWindow
 ## 選択肢表示 UI。未接続でも choice_presented signal は発火する。
 @export var choice_menu: AdvChoiceMenu
+## バックログ UI。未接続でもバックログ API と signal は利用できる。
+@export var backlog_view: AdvBacklogView
 ## 画面揺れの対象（仕様書 §5.1）。未接続でも shake が無効になるだけで進行は止まらない。
 @export var shake_root: Control
 ## フェード用の最前面レイヤ。未接続でも fade が無効になるだけ。
@@ -23,6 +25,10 @@ signal line_completed(topic_id: StringName, step_uid: StringName)
 signal choice_presented(options: Array)
 signal choice_selected(index: int, option: Dictionary)
 signal flag_changed(flag_name: String, value: bool)
+signal backlog_appended(entry: AdvBacklogEntry)
+signal auto_mode_changed(enabled: bool)
+signal skip_started()
+signal skip_stopped(reason: StringName)
 signal scenario_finished()
 
 var _book: AdvScenarioBook = null
@@ -36,12 +42,20 @@ var _is_busy: bool = false
 var _typing_tween: Tween = null
 var _typing_topic_id: StringName = &""
 var _typing_step_uid: StringName = &""
+var _typing_line: AdvLineStep = null
 
 var _progress: AdvProgressState = AdvProgressState.new()
 var _is_choice_open: bool = false
 var _choice_options: Array[Dictionary] = []
 var _choice_topic_id: StringName = &""
 var _choice_step_uid: StringName = &""
+
+var _auto_mode: bool = false
+var _auto_wait_token: int = 0
+var _is_skipping: bool = false
+var _skip_accumulator: float = 0.0
+var _is_backlog_open: bool = false
+var _backlog: AdvBacklog = AdvBacklog.new()
 
 ## play_topic() / stop() のたびに増える。await をまたいだ古い進行を捨てるための世代番号。
 var _run_id: int = 0
@@ -65,9 +79,11 @@ var _last_speaker_id: StringName = &""
 
 
 func _ready() -> void:
+	set_process(true)
 	_ensure_audio_nodes()
 	_connect_message_window()
 	_connect_choice_menu()
+	_connect_backlog_view()
 
 
 ## Book と再生設定を差し替え、表示状態を初期化する。
@@ -76,6 +92,7 @@ func setup(p_book: AdvScenarioBook, p_settings: AdvKitSettings) -> void:
 	stop()
 	_book = p_book
 	_settings = p_settings if p_settings != null else AdvKitSettings.new()
+	_backlog.set_max_entries(_settings.backlog_max_entries)
 	_progress = AdvProgressState.new()
 	_current_poses.clear()
 	_current_expressions.clear()
@@ -87,12 +104,15 @@ func setup(p_book: AdvScenarioBook, p_settings: AdvKitSettings) -> void:
 	_voice.setup(_settings.voice_bus)
 	_connect_message_window()
 	_connect_choice_menu()
+	_connect_backlog_view()
 	if stage != null:
 		stage.clear()
 	if message_window != null:
 		message_window.clear()
 	if choice_menu != null:
 		choice_menu.close()
+	if backlog_view != null:
+		backlog_view.close()
 
 
 ## topic を先頭から再生する。存在しない topic はエラーにして何もしない。
@@ -112,8 +132,10 @@ func play_topic(p_topic_id: StringName) -> void:
 ## 表示中なら全文を表示し、表示済みなら次のステップへ進む。
 ## [b]BLOCKING 演出の実行中は受け付けない。[/b]
 func advance() -> void:
+	if _auto_mode:
+		set_auto_mode(false)
 	unlock_audio()
-	if not _is_playing or _is_busy or _is_choice_open:
+	if not _is_playing or _is_busy or _is_choice_open or _is_backlog_open:
 		return
 	if _is_typing:
 		skip_typing()
@@ -137,6 +159,85 @@ func is_choice_open() -> bool:
 ## 選択肢を外部から選ぶ。ChoiceMenu が無い構成やテスト用 UI でも利用できる。
 func choose_option(p_index: int) -> void:
 	_on_option_chosen(p_index)
+
+
+## オートモードを切り替える。待機中に false にすると待機を破棄する。
+func set_auto_mode(p_enabled: bool) -> void:
+	if _auto_mode == p_enabled:
+		if not p_enabled:
+			_cancel_auto_wait()
+		return
+	_auto_mode = p_enabled
+	if not _auto_mode:
+		_cancel_auto_wait()
+	auto_mode_changed.emit(_auto_mode)
+	if _auto_mode:
+		_schedule_auto_advance()
+
+
+func is_auto_mode() -> bool:
+	return _auto_mode
+
+
+## skip_action の押下中に呼び続けるスキップを開始する。
+func start_skip() -> void:
+	if not _is_playing or _is_backlog_open or _is_choice_open:
+		return
+	if _is_skipping:
+		return
+	if _auto_mode:
+		set_auto_mode(false)
+	_is_skipping = true
+	_skip_accumulator = 0.0
+	skip_started.emit()
+
+
+## スキップを解除する。解除理由はユーザー操作として記録する。
+func stop_skip() -> void:
+	_stop_skip(&"user")
+
+
+func is_skipping() -> bool:
+	return _is_skipping
+
+
+func get_backlog() -> Array[AdvBacklogEntry]:
+	return _backlog.get_entries()
+
+
+## バックログを開き、進行とオート待機を止める。
+func open_backlog() -> void:
+	if _is_backlog_open:
+		return
+	_is_backlog_open = true
+	if _auto_mode:
+		set_auto_mode(false)
+	if _is_skipping:
+		_stop_skip(&"user")
+	if backlog_view != null:
+		backlog_view.present(get_backlog())
+
+
+## バックログを閉じて、通常の入力を再び受け付ける。
+func close_backlog() -> void:
+	if not _is_backlog_open:
+		return
+	_is_backlog_open = false
+	if backlog_view != null:
+		backlog_view.close()
+
+
+func is_backlog_open() -> bool:
+	return _is_backlog_open
+
+
+## バックログ上のボイスを、通常のボイスチャンネルで再生する。
+func replay_voice(p_entry: AdvBacklogEntry) -> void:
+	if p_entry == null or _settings == null or not _settings.backlog_voice_replay:
+		return
+	unlock_audio()
+	if _voice != null:
+		_voice.play_voice(p_entry.voice_path)
 
 
 ## 現在のフラグを設定する。実際に値が変化したときだけ signal を発火する。
@@ -193,13 +294,21 @@ func restore_progress(p_data: Dictionary) -> void:
 ## 再生を中断する。走っている演出・音・Tween をすべて止める。
 ## シーン遷移や Stage の破棄はゲーム側が行う。
 func stop() -> void:
-	_stop_playback()
+	_stop_playback(true)
 
 
-func _stop_playback() -> void:
+func _stop_playback(p_clear_backlog: bool = false) -> void:
+	if _is_skipping:
+		_stop_skip(&"user")
+	if _auto_mode:
+		set_auto_mode(false)
+	_cancel_auto_wait()
 	_run_id += 1
 	_kill_typing_tween()
 	_close_choice_menu()
+	_is_backlog_open = false
+	if backlog_view != null:
+		backlog_view.close()
 	if _context != null:
 		_context.kill_all()
 	if _audio != null:
@@ -209,10 +318,13 @@ func _stop_playback() -> void:
 	_is_playing = false
 	_is_typing = false
 	_is_busy = false
+	_typing_line = null
 	_current_topic = null
 	_current_topic_id = &""
 	_step_cursor = -1
 	_last_speaker_id = &""
+	if p_clear_backlog:
+		_backlog.clear()
 
 
 func is_playing() -> bool:
@@ -226,6 +338,48 @@ func is_typing() -> bool:
 ## BLOCKING 演出の完了待ちなど、入力を受け付けない状態か。
 func is_busy() -> bool:
 	return _is_busy
+
+
+func _process(p_delta: float) -> void:
+	if not _is_skipping or not _is_playing or _is_backlog_open:
+		return
+	if _is_choice_open:
+		if _skip_stops_at_choice():
+			_stop_skip(&"choice")
+		return
+	if _is_busy:
+		return
+	_skip_accumulator += maxf(p_delta, 0.0)
+	var interval: float = _skip_interval()
+	if interval <= 0.0:
+		_skip_accumulator = 0.0
+		_process_skip_step()
+		return
+	var guard: int = 0
+	while _is_skipping and _skip_accumulator >= interval and guard < 64:
+		_skip_accumulator -= interval
+		_process_skip_step()
+		guard += 1
+		if _is_busy or _is_choice_open or not _is_playing:
+			return
+
+
+func _skip_interval() -> float:
+	if _settings == null:
+		return 0.02
+	return maxf(_settings.skip_interval, 0.0)
+
+
+func _skip_stops_at_choice() -> bool:
+	return _settings == null or _settings.skip_stops_at_choice
+
+
+func _stop_skip(p_reason: StringName) -> void:
+	if not _is_skipping:
+		return
+	_is_skipping = false
+	_skip_accumulator = 0.0
+	skip_stopped.emit(p_reason)
 
 
 ## 演出を追加・差し替えする（仕様書 §5.3 / §7）。
@@ -275,7 +429,12 @@ func get_effect_context() -> AdvEffectContext:
 
 # --- 進行制御 ---------------------------------------------------------------
 
-func _start_topic(p_topic: AdvTopic, p_topic_id: StringName, p_cursor: int) -> void:
+func _start_topic(
+	p_topic: AdvTopic,
+	p_topic_id: StringName,
+	p_cursor: int,
+	p_process_immediately: bool = true
+) -> void:
 	_current_topic = p_topic
 	_current_topic_id = p_topic_id
 	_step_cursor = p_cursor
@@ -284,13 +443,14 @@ func _start_topic(p_topic: AdvTopic, p_topic_id: StringName, p_cursor: int) -> v
 	_is_busy = false
 	_progress.set_position(p_topic_id, &"")
 	topic_started.emit(_current_topic_id)
-	_process_next_step()
+	if p_process_immediately:
+		_process_next_step()
 
 ## 次に「入力待ちになる状態」まで進める。
 ## BLOCKING 演出に当たった場合はそこで await するため、この関数はコルーチンになる。
 func _process_next_step() -> void:
 	var run_id: int = _run_id
-	while _is_playing and run_id == _run_id:
+	while _is_playing and run_id == _run_id and not _is_backlog_open:
 		if _voice != null:
 			_voice.stop()
 		_step_cursor += 1
@@ -343,7 +503,67 @@ func _process_next_step() -> void:
 		_warn_unimplemented_step(step)
 
 
-func _show_line(p_line: AdvLineStep) -> void:
+## スキップ中に 1 ステップだけ処理する。演出は apply_final() へ置き換える。
+func _process_skip_step() -> void:
+	if not _is_skipping or not _is_playing or _is_busy or _is_choice_open:
+		return
+	if _is_typing:
+		_complete_typing()
+		return
+	if _voice != null:
+		_voice.stop()
+	_step_cursor += 1
+	if _current_topic == null or _step_cursor >= _current_topic.steps.size():
+		_finish_topic()
+		return
+
+	var step: AdvStep = _current_topic.steps[_step_cursor]
+	if step == null:
+		return
+	_progress.set_position(_current_topic_id, step.uid)
+	step_shown.emit(_current_topic_id, step.uid)
+
+	# 既読連動が有効なときは未読 line を表示した時点でスキップを解除する。
+	var line: AdvLineStep = step as AdvLineStep
+	if line != null and not _skip_unread() and not _progress.is_step_read(line.uid):
+		_stop_skip(&"unread")
+		_start_parallel_effects(step)
+		_show_line(line)
+		return
+
+	_start_parallel_effects(step)
+	if line != null:
+		_show_line(line, true)
+		return
+
+	var effect: AdvEffectStep = step as AdvEffectStep
+	if effect != null:
+		_apply_effect_final(effect)
+		return
+
+	var choice: AdvChoiceStep = step as AdvChoiceStep
+	if choice != null:
+		_present_choice(choice)
+		return
+
+	var jump: AdvJumpStep = step as AdvJumpStep
+	if jump != null:
+		if not AdvCondition.evaluate(jump.condition, _progress.get_flags()):
+			return
+		if String(jump.goto).is_empty():
+			_finish_topic()
+			return
+		_transition_to_topic(jump.goto)
+		return
+
+	_warn_unimplemented_step(step)
+
+
+func _skip_unread() -> bool:
+	return _settings != null and _settings.skip_unread
+
+
+func _show_line(p_line: AdvLineStep, p_skipping: bool = false) -> void:
 	var speaker_name: String = ""
 	var name_color: Color = Color.WHITE
 	var character: AdvCharacter = null
@@ -372,7 +592,7 @@ func _show_line(p_line: AdvLineStep) -> void:
 
 		_apply_speaker_direction(p_line.speaker_id)
 
-	if _voice != null:
+	if _voice != null and not p_skipping:
 		_voice.play_voice(p_line.voice_path)
 
 	if message_window != null:
@@ -380,7 +600,8 @@ func _show_line(p_line: AdvLineStep) -> void:
 
 	_typing_topic_id = _current_topic_id
 	_typing_step_uid = p_line.uid
-	_begin_typing(p_line.text)
+	_typing_line = p_line
+	_begin_typing(p_line.text, p_skipping)
 
 
 func _present_choice(p_choice: AdvChoiceStep) -> void:
@@ -427,6 +648,8 @@ func _on_option_chosen(p_index: int) -> void:
 	if not String(goto).is_empty():
 		_transition_to_topic(goto)
 		return
+	if _is_skipping:
+		return
 	_process_next_step()
 
 
@@ -440,7 +663,7 @@ func _transition_to_topic(p_topic_id: StringName) -> void:
 		_finish_topic()
 		return
 	_finish_topic(false)
-	_start_topic(topic, p_topic_id, -1)
+	_start_topic(topic, p_topic_id, -1, not _is_skipping)
 
 
 ## このステップに畳み込まれた PARALLEL 演出を一斉に起動する。完了は待たない。
@@ -449,7 +672,10 @@ func _start_parallel_effects(p_step: AdvStep) -> void:
 		var effect: AdvEffectStep = entry as AdvEffectStep
 		if effect == null:
 			continue
-		_play_effect(effect)
+		if _is_skipping:
+			_apply_effect_final(effect)
+		else:
+			_play_effect(effect)
 
 
 ## 演出を1つ再生する。await すれば完了まで待てる。
@@ -464,6 +690,15 @@ func _play_effect(p_effect: AdvEffectStep) -> void:
 	if _context == null:
 		_build_context()
 	await handler.play(_context, p_effect.params)
+
+
+func _apply_effect_final(p_effect: AdvEffectStep) -> void:
+	var handler: AdvEffectHandler = _effects.get(p_effect.effect_id, null)
+	if handler == null:
+		return
+	if _context == null:
+		_build_context()
+	handler.apply_final(_context, p_effect.params)
 
 
 func _implicit_show_duration() -> float:
@@ -567,10 +802,13 @@ func _start_speaker_hop(p_speaker_id: StringName, p_portrait: AdvPortrait) -> vo
 	tween.tween_property(p_portrait, "position", resting_position, half_duration)
 
 
-func _begin_typing(p_text: String) -> void:
+func _begin_typing(p_text: String, p_skipping: bool = false) -> void:
 	_is_typing = true
 	if message_window != null:
 		message_window.set_typing_progress(0.0)
+	if p_skipping:
+		_complete_typing()
+		return
 
 	var typing_speed: float = 0.0
 	if _settings != null:
@@ -607,7 +845,65 @@ func _complete_typing() -> void:
 	if message_window != null:
 		message_window.complete_typing()
 	_progress.mark_step_read(_typing_step_uid)
+	_append_backlog(_typing_line)
 	line_completed.emit(_typing_topic_id, _typing_step_uid)
+	_typing_line = null
+	if _is_playing and _auto_mode and not _is_skipping and not _is_backlog_open:
+		_schedule_auto_advance()
+
+
+func _append_backlog(p_line: AdvLineStep) -> void:
+	if p_line == null:
+		return
+	var speaker_name: String = ""
+	var name_color: Color = Color.WHITE
+	if _book != null and not p_line.is_narration():
+		var character: AdvCharacter = _book.get_character(p_line.speaker_id)
+		if character != null:
+			speaker_name = character.display_name
+			name_color = character.name_color
+	var entry := AdvBacklogEntry.new(
+		p_line.uid,
+		speaker_name,
+		name_color,
+		p_line.text,
+		p_line.voice_path)
+	_backlog.append(entry)
+	if _backlog.get_max_entries() > 0:
+		backlog_appended.emit(entry)
+
+
+func _schedule_auto_advance() -> void:
+	if not _auto_mode or not _is_playing or _is_typing or _is_busy:
+		return
+	if _is_backlog_open or _is_choice_open or _is_skipping:
+		return
+	_auto_wait_token += 1
+	var wait_token: int = _auto_wait_token
+	var wait_time: float = 0.0
+	if _settings != null:
+		wait_time = maxf(_settings.auto_wait_time, 0.0)
+		if _settings.auto_wait_for_voice and _voice != null:
+			wait_time = maxf(wait_time, _voice.get_remaining_time())
+	_wait_auto_advance(wait_token, wait_time)
+
+
+func _wait_auto_advance(p_wait_token: int, p_wait_time: float) -> void:
+	if p_wait_time > 0.0 and is_inside_tree():
+		await get_tree().create_timer(p_wait_time).timeout
+	else:
+		await get_tree().process_frame
+	if p_wait_token != _auto_wait_token:
+		return
+	if not _auto_mode or not _is_playing or _is_typing or _is_busy:
+		return
+	if _is_backlog_open or _is_choice_open or _is_skipping:
+		return
+	_process_next_step()
+
+
+func _cancel_auto_wait() -> void:
+	_auto_wait_token += 1
 
 
 func _kill_typing_tween() -> void:
@@ -619,10 +915,15 @@ func _kill_typing_tween() -> void:
 func _finish_topic(p_emit_scenario_finished: bool = true) -> void:
 	if not _is_playing:
 		return
+	if p_emit_scenario_finished:
+		_stop_skip(&"finished")
+		if _auto_mode:
+			set_auto_mode(false)
 	var finished_topic_id: StringName = _current_topic_id
 	_is_playing = false
 	_is_typing = false
 	_is_busy = false
+	_typing_line = null
 	_close_choice_menu()
 	_kill_typing_tween()
 	_current_topic = null
@@ -814,6 +1115,16 @@ func _connect_choice_menu() -> void:
 		choice_menu.option_chosen.connect(_on_option_chosen)
 
 
+func _connect_backlog_view() -> void:
+	if backlog_view == null:
+		return
+	if not backlog_view.closed.is_connected(_on_backlog_closed):
+		backlog_view.closed.connect(_on_backlog_closed)
+	if not backlog_view.voice_replay_requested.is_connected(
+		_on_backlog_voice_replay_requested):
+		backlog_view.voice_replay_requested.connect(_on_backlog_voice_replay_requested)
+
+
 func _close_choice_menu() -> void:
 	if choice_menu != null and _is_choice_open:
 		choice_menu.close()
@@ -831,13 +1142,34 @@ func _on_skip_typing_requested() -> void:
 	skip_typing()
 
 
+func _on_backlog_closed() -> void:
+	close_backlog()
+
+
+func _on_backlog_voice_replay_requested(p_entry: AdvBacklogEntry) -> void:
+	replay_voice(p_entry)
+
+
 func _unhandled_input(p_event: InputEvent) -> void:
 	if not _is_playing or _settings == null:
 		return
-	# phase-03 時点では skip_action を「タイプライタ即時完了」に割り当てている。
-	# 本来のスキップ（既読連動）は phase-06 で差し替える。
+	if p_event.is_action_released(_settings.skip_action):
+		stop_skip()
+		get_viewport().set_input_as_handled()
+		return
 	if p_event.is_action_pressed(_settings.skip_action):
-		skip_typing()
+		start_skip()
+		get_viewport().set_input_as_handled()
+		return
+	if p_event.is_action_pressed(_settings.auto_action):
+		set_auto_mode(not _auto_mode)
+		get_viewport().set_input_as_handled()
+		return
+	if p_event.is_action_pressed(_settings.backlog_action):
+		if _is_backlog_open:
+			close_backlog()
+		else:
+			open_backlog()
 		get_viewport().set_input_as_handled()
 		return
 	if p_event.is_action_pressed(_settings.advance_action):

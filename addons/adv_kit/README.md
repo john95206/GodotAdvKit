@@ -3,10 +3,11 @@
 Godot 4.7 向けの ADV（ノベルゲーム）共通パッケージ（4.5 でも動作を確認済み）。
 シナリオのデータモデル、JSON パーサ、検証、最小の再生ランタイムを提供する。
 
-> **現在のフェーズ: phase-05 (topics-choices-and-progress)**
+> **現在のフェーズ: phase-06 (play-assist)**
 > 立ち絵付きの行をタイプライタ表示してテキスト送りでき、揺れ・フェード・立ち絵の
 > 登場／退場／移動・SE・BGM・ボイスが動きます。話者交代時の非話者ダークとホップも
 > 設定で制御できます。選択肢・話題遷移・フラグ・既読・進行復元にも対応しています。
+> オートモード、既読連動スキップ、バックログ、バックログからのボイス再生にも対応しています。
 
 ---
 
@@ -20,10 +21,12 @@ Godot 4.7 向けの ADV（ノベルゲーム）共通パッケージ（4.5 で�
 | `AdvEffectSchema` | 演出パラメータの型・既定値表と型変換 |
 | `AdvParseResult` / `AdvIssue` | 結果と問題の1件 |
 | `AdvProgressState` | topic / step UID / フラグ / 既読集合の Node 非依存状態 |
+| `AdvBacklog` / `AdvBacklogEntry` | 上限付きバックログと line の表示情報 |
 | `AdvPlayer` | 進行制御。演出の起動と BLOCKING の完了待ち |
 | `AdvEffectHandler` / `AdvEffectContext` | 演出の拡張点と実行文脈 |
 | `AdvAudioDirector` / `AdvVoicePlayer` | SE / BGM / ボイスのチャンネル |
 | `AdvChoiceMenu` | ゲーム側が外観を実装する選択肢 UI の基底クラス |
+| `AdvBacklogView` | ゲーム側が外観を実装するバックログ UI の基底クラス |
 
 ### 最短の使い方
 
@@ -117,8 +120,25 @@ expression / slot / modulate が含まれ、旧形式でこのキーが無いデ
 
 `AdvScene` の標準構成は `ShakeRoot`（背景＋ステージ）、`FadeLayer`、
 `MessageWindow`、`AdvPlayer` です。入力アクション `adv_advance`（マウス左・
-Enter・Space）と `adv_skip`（Ctrl）が、アドオン有効化時に未定義の場合だけ登録されます。
+Enter・Space）、`adv_skip`（Ctrl）、`adv_auto`（A）、`adv_backlog`（ホイール上・B）が、
+アドオン有効化時に未定義の場合だけ登録されます。
 既存の InputMap 設定は変更しません。
+
+### オート・スキップ・バックログ
+
+AdvPlayer.set_auto_mode(true) で、line のタイプライタ完了後に auto_wait_time 待って
+次へ進みます。auto_wait_for_voice が有効なら、ボイスの残り時間との最大値を待ちます。
+advance()、選択肢、バックログ表示、シナリオ終端で解除されます。
+
+start_skip() / stop_skip() は skip_action の押下中だけ継続するスキップです。既定では
+未読 line に到達すると停止し、skip_unread = true なら未読も進みます。スキップ中は
+タイプライタ・ボイス・演出の再生を行わず、演出の apply_final() だけを適用します。
+選択肢停止は skip_stops_at_choice で制御できます。
+
+open_backlog() / close_backlog() は AdvBacklogView を開閉し、開いている間の進行を止めます。
+バックログは topic をまたいで保持し、stop() でクリアされます。backlog_voice_replay が
+有効なら replay_voice(entry) または UI の voice_replay_requested で同じボイスチャンネル
+から再生できます。バックログは get_progress() には含まれません。
 
 ### 話者交代の汎用演出
 
@@ -226,10 +246,11 @@ adv_scene.player.register_effect(&"flash", MyFlashEffect.new())
   自動的に解除されますが、タイトル画面のクリックなどで先に解除したい場合は
   `AdvPlayer.unlock_audio()` を呼んでください。
 
-### phase-05 の制限
+### phase-06 の制限
 
-- オート・本格的なスキップ・バックログは未実装です（phase-06）。
-  `AdvEffectHandler.apply_final()` は実装済みですが、呼び出し側はまだありません。
+- バックログは進行データではないため、get_progress() には含まれません。必要ならゲーム側で別途保存してください。
+- skip_stops_at_choice = false のとき、スキップは選択肢を自動選択しません。選択後に継続します。
+- AdvBacklogView の外観と、ボイス再生ボタンの配置はゲーム側で差し替えてください。
 - 立ち絵テクスチャと音源は使う直前に遅延ロードされます。
   パスが空または存在しない場合も、警告だけ出して進行します。
 
@@ -303,6 +324,9 @@ godot --headless --script res://addons/adv_kit/tests/test_auto_direction.gd
 
 # 6) phase-05 の選択肢・進行状態テスト
 godot --headless --script res://addons/adv_kit/tests/test_progress.gd
+
+# 7) phase-06 のオート・スキップ・バックログテスト
+godot --headless --script res://addons/adv_kit/tests/test_play_assist.gd
 ```
 
 **`--import` を飛ばすと `class_name` が解決できずスクリプトが起動しない。**
@@ -340,6 +364,7 @@ addons/adv_kit/
     adv_scenario_parser.gd
     adv_scenario_validator.gd
     adv_progress_state.gd
+    adv_backlog.gd  adv_backlog_entry.gd
   resources/
     adv_character.gd  adv_portrait_set.gd
     adv_step.gd       adv_line_step.gd   adv_effect_step.gd
@@ -347,7 +372,7 @@ addons/adv_kit/
     adv_topic.gd  adv_scenario_book.gd  adv_kit_settings.gd
   ui/
     adv_scene.tscn / .gd  adv_stage.tscn / .gd
-    adv_portrait.tscn / .gd  adv_message_window.gd  adv_choice_menu.gd
+    adv_portrait.tscn / .gd  adv_message_window.gd  adv_choice_menu.gd  adv_backlog_view.gd
   runtime/
     adv_player.gd            # 進行制御
     adv_effect_context.gd    # 演出の実行文脈と排他ターゲットの Tween 台帳
@@ -360,9 +385,10 @@ addons/adv_kit/
   samples/ui/
     plain_message_window.tscn / .gd
     plain_choice_menu.tscn / .gd
+    plain_backlog_view.tscn / .gd
   samples/sample_scenario.json
   tests/
-    test_scenario_parse.gd  test_playback.gd  test_effects.gd  test_auto_direction.gd  test_progress.gd
+    test_scenario_parse.gd  test_playback.gd  test_effects.gd  test_auto_direction.gd  test_progress.gd  test_play_assist.gd
     assets/test_tone.tres    # テスト専用の極小 WAV（実素材の代わり）
 ```
 
