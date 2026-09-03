@@ -24,6 +24,14 @@ var location: String = ""
 var message: String = ""
 
 
+## topic と step の位置表記を統一して組み立てる。
+## `location` はインスタンス変数と同名にできないため、GDScript 上の名前は make_location。
+static func make_location(
+	p_topic_id: StringName, p_step_index: int, p_suffix: String = ""
+) -> String:
+	return "topics/%s/steps[%d]%s" % [p_topic_id, p_step_index, p_suffix]
+
+
 static func error(p_code: StringName, p_location: String, p_message: String) -> AdvIssue:
 	var issue := AdvIssue.new()
 	issue.severity = Severity.ERROR

@@ -15,7 +15,7 @@ Godot 4.7 向けの **ADV（ノベルゲーム）共通パッケージ**と、�
 > git の差分に出たら、それはバージョンを行き来した印です。
 | レンダラー | **Compatibility**（Web / unityroom 前提） |
 | 言語 | GDScript（静的型付け必須） |
-| 現在のフェーズ | **phase-01 完了 / phase-02 未着手** |
+| 現在のフェーズ | **phase-02 完了 / phase-03 未着手** |
 
 ## このリポジトリの構成
 
@@ -50,8 +50,11 @@ AdvKit/
 # class_name のグローバル解決のため、先にインポートを1回走らせる
 godot --headless --import
 
-# 失敗が1件でもあれば終了コード 1
+# phase-01: 失敗が1件でもあれば終了コード 1
 godot --headless --script res://addons/adv_kit/tests/test_scenario_parse.gd
+
+# phase-02: 再生テスト
+godot --headless --script res://addons/adv_kit/tests/test_playback.gd
 ```
 
 > **Windows で CLI から叩くときは `_console.exe` の方を使うこと。**

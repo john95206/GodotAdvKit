@@ -36,7 +36,7 @@ static func validate(p_book: AdvScenarioBook) -> Array[AdvIssue]:
 				CODE_EMPTY_TOPIC, "topics/%s" % topic_id, "steps が 0 件の話題です"))
 		for index: int in topic.steps.size():
 			var step: AdvStep = topic.steps[index]
-			var location: String = "topics/%s/steps[%d]" % [topic_id, index]
+			var location: String = AdvIssue.make_location(topic_id, index)
 			_validate_step(step, p_book, location, referenced, issues)
 			for sub_index: int in step.parallel_effects.size():
 				var sub_location: String = "%s/parallel_effects[%d]" % [location, sub_index]
