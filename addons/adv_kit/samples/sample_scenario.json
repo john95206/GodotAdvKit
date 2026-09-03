@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-03T14:00:00+09:00",
+  "content_hash": "sample-0001",
+  "characters": [
+    {
+      "id": "yuu",
+      "display_name": "ユウ",
+      "name_color": "#ffd27f",
+      "portrait_dir": "res://game/assets/adv/portraits/yuu",
+      "poses": ["stand", "arms_crossed"],
+      "expressions": ["normal", "smile", "worried"],
+      "default_pose": "stand",
+      "default_expression": "normal"
+    },
+    {
+      "id": "rin",
+      "display_name": "リン",
+      "name_color": "#9fd8ff",
+      "portrait_dir": "res://game/assets/adv/portraits/rin",
+      "poses": ["stand"],
+      "expressions": ["normal", "angry"],
+      "default_pose": "stand",
+      "default_expression": "normal"
+    },
+    {
+      "id": "kaze",
+      "display_name": "風の声",
+      "name_color": "#cfcfcf"
+    }
+  ],
+  "topics": [
+    {
+      "id": "prologue_01",
+      "title": "プロローグ",
+      "tags": ["chapter1", "entry"],
+      "steps": [
+        { "order": 10, "type": "line", "speaker": "yuu", "expression": "smile", "pose": "stand", "slot": "center", "text": "……ようやく着いた。", "voice": "res://game/assets/adv/voice/yuu_0001.ogg" },
+        { "order": 20, "type": "effect", "effect_id": "play_se", "params": { "stream": "res://game/assets/adv/se/door.ogg" }, "sync": "parallel" },
+        { "order": 30, "type": "line", "speaker": "", "text": "扉の向こうから、湿った空気が流れ出してくる。" },
+        { "order": 40, "type": "effect", "effect_id": "shake", "params": { "strength": "8", "duration": "0.4" }, "sync": "blocking", "auto_advance": true },
+        { "order": 50, "type": "effect", "effect_id": "play_bgm", "params": { "stream": "res://game/assets/adv/bgm/ruins.ogg", "loop": "true", "fade_in_time": "1.5" }, "sync": "parallel" },
+        { "order": 60, "type": "line", "speaker": "rin", "expression": "angry", "pose": "stand", "slot": "left", "text": "だから言ったでしょう。ここは崩れかけてるって。" },
+        { "order": 70, "type": "effect", "effect_id": "show_portrait", "params": { "speaker": "kaze", "slot": "right", "duration": "0.3" }, "sync": "blocking", "auto_advance": false },
+        { "order": 80, "type": "line", "speaker": "kaze", "slot": "right", "text": "……戻れ。ここは、まだ早い。", "voice": "res://game/assets/adv/voice/kaze_0001.ogg" },
+        { "order": 90, "type": "choice", "prompt": "どうする？" },
+        { "order": 100, "type": "option", "label": "奥へ進む", "goto": "route_a", "flag": "chose_go" },
+        { "order": 110, "type": "option", "label": "いったん引き返す", "goto": "route_b", "condition": "!chose_go" }
+      ]
+    },
+    {
+      "id": "route_a",
+      "title": "奥へ進む",
+      "tags": ["chapter1"],
+      "steps": [
+        { "order": 10, "type": "line", "speaker": "yuu", "expression": "smile", "slot": "center", "text": "ここまで来て、引き返せるものか。", "voice": "res://game/assets/adv/voice/yuu_0002.ogg" },
+        { "order": 20, "type": "effect", "effect_id": "move_portrait", "params": { "speaker": "yuu", "to_slot": "left", "duration": "0.6", "ease": "out" }, "sync": "blocking" },
+        { "order": 30, "type": "effect", "effect_id": "shake", "params": { "strength": "4", "frequency": "18" }, "sync": "parallel" },
+        { "order": 40, "type": "line", "speaker": "rin", "expression": "normal", "slot": "right", "text": "……もう。知りませんからね。" },
+        { "order": 50, "type": "jump", "goto": "epilogue_01" }
+      ]
+    },
+    {
+      "id": "route_b",
+      "title": "引き返す",
+      "tags": ["chapter1"],
+      "steps": [
+        { "order": 10, "type": "line", "speaker": "kaze", "slot": "center_left", "text": "……賢明だ。" },
+        { "order": 20, "type": "effect", "effect_id": "fade_out", "params": { "duration": "0.6", "color": "#000000" }, "sync": "blocking", "auto_advance": true },
+        { "order": 30, "type": "effect", "effect_id": "play_se", "params": { "stream": "res://game/assets/adv/se/step_back.ogg", "volume_db": "-6" }, "sync": "parallel" },
+        { "order": 40, "type": "line", "speaker": "yuu", "expression": "worried", "slot": "center_right", "text": "……今日のところは、な。", "voice": "res://game/assets/adv/voice/yuu_0003.ogg" },
+        { "order": 50, "type": "jump", "goto": "epilogue_01" }
+      ]
+    },
+    {
+      "id": "epilogue_01",
+      "title": "エピローグ",
+      "tags": ["chapter1"],
+      "steps": [
+        { "order": 10, "type": "effect", "effect_id": "fade_in", "params": { "duration": "0.8" }, "sync": "blocking", "auto_advance": true },
+        { "order": 20, "type": "line", "speaker": "yuu", "expression": "smile", "slot": "center", "text": "また来る。今度は、灯りを持って。" },
+        { "order": 30, "type": "line", "speaker": "", "text": "扉が、ゆっくりと閉じた。" },
+        { "order": 40, "type": "effect", "effect_id": "stop_bgm", "params": { "fade_out_time": "1.0" }, "sync": "blocking" },
+        { "order": 50, "type": "jump", "goto": "" }
+      ]
+    }
+  ]
+}
