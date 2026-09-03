@@ -3,9 +3,9 @@
 Godot 4.7 向けの ADV（ノベルゲーム）共通パッケージ（4.5 でも動作を確認済み）。
 シナリオのデータモデル、JSON パーサ、検証、最小の再生ランタイムを提供する。
 
-> **現在のフェーズ: phase-02 (runtime-playback)**
-> `AdvScene` に `AdvPlayer` を組み込み、立ち絵付きの行をタイプライタ表示して
-> テキスト送りできます。演出・選択肢・ボイスは後続フェーズです。
+> **現在のフェーズ: phase-03 (local-effects-and-voice)**
+> 立ち絵付きの行をタイプライタ表示してテキスト送りでき、揺れ・フェード・立ち絵の
+> 登場／退場／移動・SE・BGM・ボイスが動きます。選択肢と話題遷移は後続フェーズです。
 
 ---
 
@@ -18,6 +18,9 @@ Godot 4.7 向けの ADV（ノベルゲーム）共通パッケージ（4.5 で�
 | `AdvCondition` | `condition` 文字列の構文検証と評価 |
 | `AdvEffectSchema` | 演出パラメータの型・既定値表と型変換 |
 | `AdvParseResult` / `AdvIssue` | 結果と問題の1件 |
+| `AdvPlayer` | 進行制御。演出の起動と BLOCKING の完了待ち |
+| `AdvEffectHandler` / `AdvEffectContext` | 演出の拡張点と実行文脈 |
+| `AdvAudioDirector` / `AdvVoicePlayer` | SE / BGM / ボイスのチャンネル |
 
 ### 最短の使い方
 
@@ -107,13 +110,77 @@ func clear() -> void:
 から emit すると `AdvPlayer` がそれぞれテキスト送り／タイプライタ完了として扱います。
 無装飾の参照実装は `samples/ui/plain_message_window.tscn` です。
 
-### phase-02 の制限
+---
 
-- `AdvEffectStep` と `parallel_effects` は警告を出して素通りします（phase-03）。
+## 演出
+
+シナリオの `effect` 行がそのまま動きます。`AdvScene.tscn` を使っていれば配線は不要です。
+
+| effect_id | params |
+|-----------|--------|
+| `shake` | `strength=8.0` / `duration=0.4` / `frequency=24.0` |
+| `fade_out` | `duration=0.5` / `color=#000000` |
+| `fade_in` | `duration=0.5` / `color`（省略時は現在色を維持） |
+| `show_portrait` | `speaker`（必須） / `slot=center` / `duration=0.2` |
+| `hide_portrait` | `speaker`（必須） / `duration=0.2` |
+| `move_portrait` | `speaker`（必須） / `to_slot`（必須） / `duration=0.4` / `ease=out` |
+| `play_se` | `stream`（必須） / `volume_db=0.0` |
+| `play_bgm` | `stream`（必須） / `fade_in_time=0.0` / `loop=true` |
+| `stop_bgm` | `fade_out_time=0.0` |
+
+- `sync=parallel` の演出は**直前のステップと同時に走り、完了を待ちません**。
+- `sync=blocking` の演出は**独立した1ステップ**として完了まで待たれます。
+  `auto_advance=TRUE` なら完了後に自動で次へ進み、`FALSE` ならテキスト送りを待ちます。
+  待っている間 `AdvPlayer.is_busy()` が真になり、`advance()` は無視されます。
+- **音源も立ち絵も、無ければ警告だけ出して進行は止まりません。**
+
+### 独自の演出を足す
+
+`AdvEffectHandler` を継承して `AdvPlayer.register_effect()` へ登録します。
+組み込みと同じ id を登録すれば差し替えになります。
+
+```gdscript
+class MyFlashEffect extends AdvEffectHandler:
+    func play(p_ctx: AdvEffectContext, p_params: Dictionary) -> void:
+        var duration: float = get_float(p_params, &"duration", 0.2)
+        var tween: Tween = p_ctx.acquire_tween(exclusive_targets(p_params))
+        tween.tween_property(p_ctx.fade_layer, "color:a", 0.0, duration)
+        await tween.finished
+
+    func apply_final(p_ctx: AdvEffectContext, _p_params: Dictionary) -> void:
+        p_ctx.fade_layer.color.a = 0.0
+
+    ## 排他ターゲットを宣言すると、同時に走る演出との衝突を検証できる。
+    func exclusive_targets(_p_params: Dictionary) -> PackedStringArray:
+        return PackedStringArray(["fade_layer_alpha"])
+
+adv_scene.player.register_effect(&"flash", MyFlashEffect.new())
+```
+
+- **Tween は必ず `ctx.acquire_tween()` で作ること。** 同じ排他ターゲットで走っている
+  Tween を先に `kill()` するので、演出が重なっても「後から始まった方が勝つ」になります。
+  直接 `create_tween()` を呼ぶと、この保護から外れます。
+- `exclusive_targets()` を実装しない拡張演出は衝突検査の対象外です。
+- 未登録の `effect_id` は警告を出して素通りします（進行は止まりません）。
+
+## 音とボイス
+
+- `AdvLineStep.voice_path` は `AdvPlayer` が自動で再生し、次のステップへ進んだ時点で止めます。
+  **空でも進行は変わりません。**
+- ボイスのバスは `AdvKitSettings.voice_bus`（既定 `Voice`）。無ければ `Master` に落ちます。
+- **Web の autoplay ポリシー対応**として、最初のユーザー操作までは BGM・SE・ボイスの
+  すべてを再生しません（保留もせず破棄します）。初回の `advance()` / `skip_typing()` で
+  自動的に解除されますが、タイトル画面のクリックなどで先に解除したい場合は
+  `AdvPlayer.unlock_audio()` を呼んでください。
+
+### phase-03 の制限
+
 - `AdvChoiceStep` と `AdvJumpStep` は警告を出して素通りします（phase-05）。
-- ボイス、非話者ダーク、話者交代ホップ、オート、スキップ、バックログ、セーブは未実装です。
-- 立ち絵テクスチャは `AdvPortrait.apply()` の呼び出し時だけ遅延ロードされます。
-  パスが空または存在しない場合も立ち絵無しとして進行します。
+- 非話者ダーク・話者交代ホップは未実装です（phase-04）。
+- オート・スキップ・バックログ・セーブは未実装です（phase-05 / 06）。
+  `AdvEffectHandler.apply_final()` は実装済みですが、呼び出し側はまだありません。
+- 立ち絵テクスチャと音源は使う直前に遅延ロードされます。
+  パスが空または存在しない場合も、警告だけ出して進行します。
 
 ---
 
@@ -176,23 +243,28 @@ godot --headless --script res://addons/adv_kit/tests/test_scenario_parse.gd
 
 # 3) phase-02 の再生テスト
 godot --headless --script res://addons/adv_kit/tests/test_playback.gd
+
+# 4) phase-03 の演出・ボイステスト
+godot --headless --script res://addons/adv_kit/tests/test_effects.gd
 ```
 
 **`--import` を飛ばすと `class_name` が解決できずスクリプトが起動しない。**
 `.godot/global_script_class_cache.cfg` が生成されていない状態では、
 `--script` で起動したスクリプトからグローバルクラスを参照できないため。
 
-CI では 1) → 2) の順に必ず両方を走らせる。
+CI では 1) → 2) → 3) → 4) の順に必ず全部走らせる。
+**判定は終了コードで行うこと。** 終了時に出る `ObjectDB instances leaked` /
+`resources still in use` は `AdvStep` の型自己参照による既知のもので、
+終了コードには影響しない（仕様書 §4.3）。
 
 ---
 
 ## この時点で意図的にやっていないこと
 
-- 演出ハンドラ（phase-03）
+- 非話者ダーク・話者交代ホップ（phase-04）
 - 選択肢・話題遷移・フラグ・既読・セーブ（phase-05）
 - オート・本格的なスキップ・バックログ（phase-06）
 - `.tres` の書き出し（`ResourceSaver` を呼ばない）
-- ボイス（phase-03）
 - 立ち絵テクスチャのインポート時検査（phase-07）
 - HTTP 取得 / GAS / エディタ Dock / CLI インポータ（phase-07）
 - `AdvScenarioBook.merge()`（章分割の運用が未決のため。仕様書 §13 U-07）
@@ -221,11 +293,20 @@ addons/adv_kit/
     adv_scene.tscn / .gd  adv_stage.tscn / .gd
     adv_portrait.tscn / .gd  adv_message_window.gd
   runtime/
-    adv_player.gd
+    adv_player.gd            # 進行制御
+    adv_effect_context.gd    # 演出の実行文脈と排他ターゲットの Tween 台帳
+    adv_audio_director.gd    # SE / BGM
+    adv_voice_player.gd      # ボイス（単一チャンネル）
+    effects/
+      adv_effect_handler.gd  # @abstract。拡張点
+      adv_shake_effect.gd    adv_fade_effect.gd
+      adv_portrait_effect.gd adv_audio_effect.gd
   samples/ui/
     plain_message_window.tscn / .gd
   samples/sample_scenario.json
-  tests/test_scenario_parse.gd  test_playback.gd
+  tests/
+    test_scenario_parse.gd  test_playback.gd  test_effects.gd
+    assets/test_tone.tres    # テスト専用の極小 WAV（実素材の代わり）
 ```
 
 `AdvOptionStep` は**パースの中間表現**で、仕様書 §4 の表には無い。

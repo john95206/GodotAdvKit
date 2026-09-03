@@ -62,8 +62,10 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="AdvPlayer" type="Node" parent="." node_paths=PackedStringArray("stage", "message_window")]
+[node name="AdvPlayer" type="Node" parent="." node_paths=PackedStringArray("stage", "message_window", "shake_root", "fade_layer")]
 layout_mode = 0
 script = ExtResource("3_player")
 stage = NodePath("../ShakeRoot/Stage")
 message_window = NodePath("../MessageWindow")
+shake_root = NodePath("../ShakeRoot")
+fade_layer = NodePath("../FadeLayer")

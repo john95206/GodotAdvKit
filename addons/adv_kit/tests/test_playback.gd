@@ -82,12 +82,21 @@ func _initialize() -> void:
 	stage.show_character(yuu, &"stand", &"smile", &"center", 0.0)
 	_check(stage.get_child_count() == 1, "同じキャラクターを show しても二重生成しない")
 
+	# phase-03 以降、BLOCKING 演出はフレームを回さないと完了しない。
+	# is_busy() の間は送らずに待つ（実ゲームの入力と同じ扱い）。
 	var advance_count: int = 0
-	while player.is_playing() and advance_count < 32:
+	var frame_guard: int = 0
+	while player.is_playing() and advance_count < 32 and frame_guard < 600:
+		frame_guard += 1
+		if player.is_busy():
+			await process_frame
+			continue
 		player.advance()
 		advance_count += 1
+		await process_frame
 	_check(not player.is_playing(), "サンプル topic を最後まで送れる")
 	_check(advance_count < 32, "非 line ステップで停止しない")
+	_check(frame_guard < 600, "演出の完了待ちが無限にならない")
 	_check(_step_shown_count == 7, "畳み込み後 7 ステップすべてで step_shown が出る")
 	_check(_line_completed_count == 4, "line 4 行が完了する")
 	_check(_topic_finished_count == 1, "topic_finished が 1 回出る")
