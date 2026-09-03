@@ -43,6 +43,12 @@ func apply(
 	scale = Vector2.ONE * maxf(p_portrait_scale, 0.0)
 
 
+## alpha を維持したまま立ち絵の RGB 色だけを変更する。
+## 非話者ダークは alpha を暗黙の登場・退場と共有するため、この API を使う。
+func set_modulate_rgb(p_color: Color) -> void:
+	modulate = Color(p_color.r, p_color.g, p_color.b, modulate.a)
+
+
 ## 基準点（スロット位置）を渡したときに position になる値。
 ## 移動演出はこれを Tween の目標にする。
 func position_for_base(p_base: Vector2) -> Vector2:

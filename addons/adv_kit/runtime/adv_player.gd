@@ -1,8 +1,9 @@
 class_name AdvPlayer
 extends Node
-## シナリオの再生制御（phase-03）。
+## シナリオの再生制御（phase-04）。
 ##
-## 扱うのは line の表示・送りと、[b]局所演出（§7）とボイス（§9.4）[/b]。
+## 扱うのは line の表示・送り、[b]汎用演出（§8）[/b]、
+## [b]局所演出（§7）とボイス（§9.4）[/b]。
 ## 選択肢・話題遷移・フラグ（phase-05）、オート／スキップ／バックログ（phase-06）は
 ## まだ持たない。該当ステップは警告を出して素通りする。
 
@@ -48,6 +49,9 @@ var _current_poses: Dictionary[StringName, StringName] = {}
 var _current_expressions: Dictionary[StringName, StringName] = {}
 var _current_slots: Dictionary[StringName, StringName] = {}
 
+## 地の文では更新せず、次に話者が現れたときの交代判定に使う。
+var _last_speaker_id: StringName = &""
+
 
 func _ready() -> void:
 	_ensure_audio_nodes()
@@ -63,6 +67,7 @@ func setup(p_book: AdvScenarioBook, p_settings: AdvKitSettings) -> void:
 	_current_poses.clear()
 	_current_expressions.clear()
 	_current_slots.clear()
+	_last_speaker_id = &""
 	_ensure_audio_nodes()
 	_register_builtin_effects()
 	_build_context()
@@ -88,6 +93,7 @@ func play_topic(p_topic_id: StringName) -> void:
 	_current_topic = topic
 	_current_topic_id = p_topic_id
 	_step_cursor = -1
+	_last_speaker_id = &""
 	_is_playing = true
 	topic_started.emit(_current_topic_id)
 	_process_next_step()
@@ -130,6 +136,7 @@ func stop() -> void:
 	_current_topic = null
 	_current_topic_id = &""
 	_step_cursor = -1
+	_last_speaker_id = &""
 
 
 func is_playing() -> bool:
@@ -263,6 +270,8 @@ func _show_line(p_line: AdvLineStep) -> void:
 				stage.show_character(
 					character, pose, expression, slot, _implicit_show_duration())
 
+		_apply_speaker_direction(p_line.speaker_id)
+
 	if _voice != null:
 		_voice.play_voice(p_line.voice_path)
 
@@ -302,6 +311,101 @@ func _implicit_show_duration() -> float:
 	if _settings == null:
 		return 0.0
 	return maxf(_settings.dim_duration, 0.0)
+
+
+## 話者交代時の非話者ダークと話者交代ホップを開始する。
+## どちらも入力を待たせず、Tween は既存の排他台帳へ登録する。
+func _apply_speaker_direction(p_speaker_id: StringName) -> void:
+	if String(p_speaker_id).is_empty():
+		# 地の文は直前話者の明暗状態を維持する。
+		return
+	var speaker_changed: bool = p_speaker_id != _last_speaker_id
+	_last_speaker_id = p_speaker_id
+	if not speaker_changed or stage == null:
+		return
+	var speaker_portrait: AdvPortrait = stage.get_portrait(p_speaker_id)
+	if speaker_portrait == null:
+		# unknown_speaker 等の不正データでも進行は止めない。
+		return
+
+	if _settings != null and _settings.dim_non_speakers:
+		_apply_dim_to_portraits(p_speaker_id)
+	if _settings != null and _settings.hop_on_speaker_change:
+		_start_speaker_hop(p_speaker_id, speaker_portrait)
+
+
+func _apply_dim_to_portraits(p_speaker_id: StringName) -> void:
+	if _context == null or stage == null:
+		return
+	var dim_color: Color = Color(0.55, 0.55, 0.6)
+	var duration: float = 0.15
+	if _settings != null:
+		dim_color = _settings.dim_color
+		duration = maxf(_settings.dim_duration, 0.0)
+	for character_id: StringName in stage.get_character_ids():
+		var portrait: AdvPortrait = stage.get_portrait(character_id)
+		if portrait == null:
+			continue
+		var target_color: Color = Color.WHITE if character_id == p_speaker_id else dim_color
+		_start_modulate_tween(character_id, portrait, target_color, duration)
+
+
+func _start_modulate_tween(
+	p_character_id: StringName,
+	p_portrait: AdvPortrait,
+	p_target_color: Color,
+	p_duration: float
+) -> void:
+	var target_name: String = "portrait_modulate:%s" % p_character_id
+	var targets := PackedStringArray([target_name])
+	var finalizer: Callable = func() -> void:
+		if is_instance_valid(p_portrait):
+			p_portrait.set_modulate_rgb(p_target_color)
+	if p_duration <= 0.0:
+		_context.kill_targets(targets)
+		p_portrait.set_modulate_rgb(p_target_color)
+		return
+	var tween: Tween = _context.acquire_tween(targets, finalizer)
+	if tween == null:
+		p_portrait.set_modulate_rgb(p_target_color)
+		return
+	var start_color: Color = Color(
+		p_portrait.modulate.r, p_portrait.modulate.g, p_portrait.modulate.b, 1.0)
+	var target_color: Color = Color(
+		p_target_color.r, p_target_color.g, p_target_color.b, 1.0)
+	tween.tween_method(
+		Callable(p_portrait, "set_modulate_rgb"), start_color, target_color, p_duration)
+
+
+func _start_speaker_hop(p_speaker_id: StringName, p_portrait: AdvPortrait) -> void:
+	if _context == null or stage == null:
+		return
+	var duration: float = 0.22
+	var height: float = 18.0
+	if _settings != null:
+		duration = maxf(_settings.hop_duration, 0.0)
+		height = maxf(_settings.hop_height, 0.0)
+	var resting_position: Vector2 = stage.get_portrait_position_for(
+		p_speaker_id, stage.get_character_slot(p_speaker_id))
+	if duration <= 0.0 or height <= 0.0:
+		_context.kill_targets(PackedStringArray(["portrait_position:%s" % p_speaker_id]))
+		p_portrait.position = resting_position
+		return
+
+	var targets := PackedStringArray(["portrait_position:%s" % p_speaker_id])
+	var finalizer: Callable = func() -> void:
+		if is_instance_valid(p_portrait):
+			p_portrait.position = resting_position
+	var tween: Tween = _context.acquire_tween(targets, finalizer)
+	if tween == null:
+		p_portrait.position = resting_position
+		return
+	var half_duration: float = duration * 0.5
+	var hop_position: Vector2 = resting_position - Vector2(0.0, height)
+	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(p_portrait, "position", hop_position, half_duration)
+	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tween.tween_property(p_portrait, "position", resting_position, half_duration)
 
 
 func _begin_typing(p_text: String) -> void:

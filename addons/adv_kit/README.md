@@ -3,9 +3,10 @@
 Godot 4.7 向けの ADV（ノベルゲーム）共通パッケージ（4.5 でも動作を確認済み）。
 シナリオのデータモデル、JSON パーサ、検証、最小の再生ランタイムを提供する。
 
-> **現在のフェーズ: phase-03 (local-effects-and-voice)**
+> **現在のフェーズ: phase-04 (auto-direction)**
 > 立ち絵付きの行をタイプライタ表示してテキスト送りでき、揺れ・フェード・立ち絵の
-> 登場／退場／移動・SE・BGM・ボイスが動きます。選択肢と話題遷移は後続フェーズです。
+> 登場／退場／移動・SE・BGM・ボイスが動きます。話者交代時の非話者ダークとホップも
+> 設定で制御できます。選択肢と話題遷移は後続フェーズです。
 
 ---
 
@@ -84,6 +85,24 @@ adv_scene.player.play_topic(&"prologue_01")
 `MessageWindow`、`AdvPlayer` です。入力アクション `adv_advance`（マウス左・
 Enter・Space）と `adv_skip`（Ctrl）が、アドオン有効化時に未定義の場合だけ登録されます。
 既存の InputMap 設定は変更しません。
+
+### 話者交代の汎用演出
+
+`AdvKitSettings` の設定で、シナリオに演出行を追加せずに話者交代の見せ方を調整できます。
+
+```gdscript
+settings.dim_non_speakers = true
+settings.dim_color = Color(0.55, 0.55, 0.6)
+settings.dim_duration = 0.15
+settings.hop_on_speaker_change = true
+settings.hop_height = 18.0
+settings.hop_duration = 0.22
+```
+
+- 話者は白、非話者は `dim_color` へ RGB のみ Tween されます。立ち絵の alpha は保持します。
+- 話者が変わったときだけ、対象の立ち絵が `hop_height` px 上へ跳ねて元の位置へ戻ります。
+- 地の文（`speaker` が空の行）は直前話者の明暗状態を維持し、ホップもしません。
+- どちらも進行を止めない非同期演出です。新しい話者の暗黙の登場にもホップが適用されます。
 
 ### メッセージ窓の差し替え
 
@@ -173,10 +192,9 @@ adv_scene.player.register_effect(&"flash", MyFlashEffect.new())
   自動的に解除されますが、タイトル画面のクリックなどで先に解除したい場合は
   `AdvPlayer.unlock_audio()` を呼んでください。
 
-### phase-03 の制限
+### phase-04 の制限
 
 - `AdvChoiceStep` と `AdvJumpStep` は警告を出して素通りします（phase-05）。
-- 非話者ダーク・話者交代ホップは未実装です（phase-04）。
 - オート・スキップ・バックログ・セーブは未実装です（phase-05 / 06）。
   `AdvEffectHandler.apply_final()` は実装済みですが、呼び出し側はまだありません。
 - 立ち絵テクスチャと音源は使う直前に遅延ロードされます。
@@ -246,13 +264,16 @@ godot --headless --script res://addons/adv_kit/tests/test_playback.gd
 
 # 4) phase-03 の演出・ボイステスト
 godot --headless --script res://addons/adv_kit/tests/test_effects.gd
+
+# 5) phase-04 の話者交代演出テスト
+godot --headless --script res://addons/adv_kit/tests/test_auto_direction.gd
 ```
 
 **`--import` を飛ばすと `class_name` が解決できずスクリプトが起動しない。**
 `.godot/global_script_class_cache.cfg` が生成されていない状態では、
 `--script` で起動したスクリプトからグローバルクラスを参照できないため。
 
-CI では 1) → 2) → 3) → 4) の順に必ず全部走らせる。
+CI では 1) → 2) → 3) → 4) → 5) の順に必ず全部走らせる。
 **判定は終了コードで行うこと。** 終了時に出る `ObjectDB instances leaked` /
 `resources still in use` は `AdvStep` の型自己参照による既知のもので、
 終了コードには影響しない（仕様書 §4.3）。
@@ -261,7 +282,6 @@ CI では 1) → 2) → 3) → 4) の順に必ず全部走らせる。
 
 ## この時点で意図的にやっていないこと
 
-- 非話者ダーク・話者交代ホップ（phase-04）
 - 選択肢・話題遷移・フラグ・既読・セーブ（phase-05）
 - オート・本格的なスキップ・バックログ（phase-06）
 - `.tres` の書き出し（`ResourceSaver` を呼ばない）
@@ -305,7 +325,7 @@ addons/adv_kit/
     plain_message_window.tscn / .gd
   samples/sample_scenario.json
   tests/
-    test_scenario_parse.gd  test_playback.gd  test_effects.gd
+    test_scenario_parse.gd  test_playback.gd  test_effects.gd  test_auto_direction.gd
     assets/test_tone.tres    # テスト専用の極小 WAV（実素材の代わり）
 ```
 

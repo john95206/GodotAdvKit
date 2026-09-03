@@ -96,6 +96,16 @@ func has_character(p_character_id: StringName) -> bool:
 	return get_portrait(p_character_id) != null
 
 
+## ステージ上に現在表示されているキャラクター ID の一覧を返す。
+## AdvPlayer の汎用演出が全立ち絵へ適用するための読み取り API。
+func get_character_ids() -> Array[StringName]:
+	var result: Array[StringName] = []
+	for character_id: StringName in _portraits.keys():
+		if get_portrait(character_id) != null:
+			result.append(character_id)
+	return result
+
+
 func get_portrait(p_character_id: StringName) -> AdvPortrait:
 	if not _portraits.has(p_character_id):
 		return null
