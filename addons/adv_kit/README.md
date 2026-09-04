@@ -3,11 +3,12 @@
 Godot 4.7 向けの ADV（ノベルゲーム）共通パッケージ（4.5 でも動作を確認済み）。
 シナリオのデータモデル、JSON パーサ、検証、最小の再生ランタイムを提供する。
 
-> **現在のフェーズ: phase-06 (play-assist)**
+> **現在のフェーズ: phase-07 (scenario-pipeline)**
 > 立ち絵付きの行をタイプライタ表示してテキスト送りでき、揺れ・フェード・立ち絵の
 > 登場／退場／移動・SE・BGM・ボイスが動きます。話者交代時の非話者ダークとホップも
 > 設定で制御できます。選択肢・話題遷移・フラグ・既読・進行復元にも対応しています。
 > オートモード、既読連動スキップ、バックログ、バックログからのボイス再生にも対応しています。
+> スプレッドシート → GAS → JSON → `.tres` の取り込みが、エディタ Dock と CLI の両方から通ります。
 
 ---
 
@@ -25,6 +26,8 @@ Godot 4.7 向けの ADV（ノベルゲーム）共通パッケージ（4.5 で�
 | `AdvPlayer` | 進行制御。演出の起動と BLOCKING の完了待ち |
 | `AdvEffectHandler` / `AdvEffectContext` | 演出の拡張点と実行文脈 |
 | `AdvAudioDirector` / `AdvVoicePlayer` | SE / BGM / ボイスのチャンネル |
+| `AdvScenarioImporter` | JSON → 検証 → `.tres` 書き出し（エディタ Dock / CLI の共通ロジック） |
+| `AdvImportResult` | インポート1回分の結果。`AdvParseResult` に書き出し結果を足したもの |
 | `AdvChoiceMenu` | ゲーム側が外観を実装する選択肢 UI の基底クラス |
 | `AdvBacklogView` | ゲーム側が外観を実装するバックログ UI の基底クラス |
 
@@ -304,6 +307,101 @@ adv_scene.player.register_effect(&"flash", MyFlashEffect.new())
 
 ---
 
+## シナリオパイプライン（phase-07）
+
+```text
+スプレッドシート ──GAS(doGet)──> JSON ──> AdvScenarioImporter ──> .tres ──> ランタイムは load() のみ
+                                            ├── エディタ Dock（手動）
+                                            └── CLI（--headless、自動化）
+```
+
+**この経路はデスクトップ（エディタ／CLI）で完結します。ランタイムから GAS API は叩きません。**
+GAS ウェブアプリは `script.googleusercontent.com` へ 302 するため CORS ヘッダを制御できず、
+ブラウザ上の Godot からの `HTTPRequest` が成立しないためです（仕様書 §6 冒頭）。
+
+シート構成とデプロイ手順は [`import/gas/README.md`](import/gas/README.md) を参照。
+
+### 出力レイアウト
+
+出力先は `ProjectSettings` の `adv_kit/import/output_dir`（既定 `res://game/resources/adv/scenario/`）。
+
+```text
+<out>/scenario_book.tres     # AdvScenarioBook。characters / topics を ExtResource で参照
+<out>/characters/<id>.tres
+<out>/topics/<id>.tres
+```
+
+id 単位に分けてあるのは、**「全消し再生成」ではなく差し替え**にするため。
+JSON から消えた id のファイルは**削除せず `stale_resource` の WARNING を出すだけ**にします
+（参照切れによる事故を避けるため。手動で消してください）。
+
+### CLI
+
+```bash
+godot --headless --import        # 先に1回
+godot --headless --script res://addons/adv_kit/import/adv_import_cli.gd -- \
+    --url=<GAS のウェブアプリ URL> --out=res://game/resources/adv/scenario/
+godot --headless --import        # 書き出した .tres を取り込む
+```
+
+| オプション | 意味 |
+|-----------|------|
+| `--url=<URL>` | GAS から取得する。環境変数 `ADV_KIT_SCENARIO_URL` でも渡せる |
+| `--file=<path>` | ローカル JSON から取り込む（オフライン検証用） |
+| `--out=<res://dir/>` | 出力先。省略時は `ProjectSettings` → 既定値の順 |
+| `--book-name=<name>` | Book のファイル名。既定 `scenario_book.tres` |
+| `--force` | `content_hash` が一致していても書き出す |
+| `--no-write` | 検証だけ行う（ドライラン） |
+| `--no-texture-check` | 立ち絵の存在検査を省く |
+
+終了コードは **0=成功 / 1=ERROR あり / 2=引数が不正**。CI はこれで判定します。
+
+> **`--import` は CLI 自身が行いません**（責務を分けるため）。
+> 書き出した直後は `.godot/` のインポートキャッシュが古いので、続けて 1 回走らせてください。
+> **Windows では `_console.exe` を使うこと。** 無印 `.exe` はコンソールに接続せず、
+> 終了コードも実行完了を待たずに 0 を返します。
+
+### エディタ Dock
+
+プラグインを有効化すると、右上ドックに「ADV シナリオ」パネルが出ます。
+URL・出力先・オプションを入れて［取得して書き出し］、またはローカル JSON を選ぶだけです。
+
+**URL はリポジトリに出しません。** 認証は URL の秘匿のみ（仕様書 §6.2 / U-05）なので、
+Dock の入力値は `user://adv_kit_import.cfg` に保存されます（`res://` ではありません）。
+`doPost` を足すなら、この判断をやり直してください。
+
+### 差分スキップ
+
+GAS のレスポンスに入っている `content_hash` を `AdvScenarioBook` が持ち回ります。
+既存の Book と一致していたら書き出しを省きます（`--force` で無効化）。
+**両方の hash が非空で一致したときだけ**スキップします。片方でも空なら書き出します。
+
+### 立ち絵の検査（`missing_portrait_texture`）
+
+インポート時にだけ行います（ランタイムでは行いません）。
+
+- 検査するのは**シナリオ中で実際に参照された `(speaker, pose, expression)` の解決結果だけ**。
+  `texture_paths` の総当たりは見ません。全組み合わせを用意する必要が無い以上、
+  存在しないパスが表に入るのは正常で、総当たりを見ると正常なプロジェクトが警告まみれになります
+- **`portrait_set` を持たないキャラクターは対象外**。立ち絵無しキャラは設計上の正常な形です
+- 存在確認は `ResourceLoader.exists()`。`.png` はインポート後 `.ctex` になるので
+  `FileAccess.file_exists()` では判定できません
+- **WARNING なので書き出しは通ります。** 進行も止まりません
+
+### エクスポート除外
+
+`export_presets.cfg` は `.gitignore` されているので、**プロジェクトごとに手で設定してください**。
+除外してよいのは以下だけです（`addons/adv_kit/` を一括除外しないこと）。
+
+```text
+res://addons/adv_kit/samples/*
+res://addons/adv_kit/tests/*
+res://addons/adv_kit/editor/*
+res://addons/adv_kit/import/*
+```
+
+---
+
 ## テストの走らせ方
 
 ```bash
@@ -327,26 +425,59 @@ godot --headless --script res://addons/adv_kit/tests/test_progress.gd
 
 # 7) phase-06 のオート・スキップ・バックログテスト
 godot --headless --script res://addons/adv_kit/tests/test_play_assist.gd
+
+# 8) phase-07 のインポータテスト
+godot --headless --script res://addons/adv_kit/tests/test_import.gd
+
+# 9) phase-08 のサンプルシーン smoke test
+godot --headless --audio-driver Dummy --script res://addons/adv_kit/tests/test_sample_scene.gd
 ```
 
 **`--import` を飛ばすと `class_name` が解決できずスクリプトが起動しない。**
 `.godot/global_script_class_cache.cfg` が生成されていない状態では、
 `--script` で起動したスクリプトからグローバルクラスを参照できないため。
 
-CI では 1) → 2) → 3) → 4) → 5) → 6) の順に必ず全部走らせる。
-**判定は終了コードで行うこと。** 終了時に出る `ObjectDB instances leaked` /
+CI では 1) → 2) → … → 9) の順に必ず全部走らせる。
+**判定は終了コードで行うこと。** Windows headless の音声回帰には `--audio-driver Dummy` を付ける。
+終了時に出る `ObjectDB instances leaked` /
 `resources still in use` は `AdvStep` の型自己参照による既知のもので、
 終了コードには影響しない（仕様書 §4.3）。
 
 ---
 
+## phase-08 サンプルと Web 確認
+
+phase-08 で `game/` にサンプルプロジェクトを追加しました。Kit 本体の UI 基底クラスへ
+ゲーム側の外観を差し込み、実素材・選択肢・演出・ボイス・バックログを一つのシーンで確認できます。
+
+- メインシーン: `game/scenes/sample_main.tscn`
+- ゲーム側 UI: `game/ui/sample_message_window.tscn` / `sample_choice_menu.tscn` /
+  `sample_backlog_view.tscn`
+- サンプル Resource: `game/resources/adv/scenario/` と `game/resources/adv/settings.tres`
+- 素材: `game/assets/adv/`。日本語表示用フォントは `game/assets/fonts/` に置いています
+
+`project.godot` の main scene がサンプルを指すため、エディタから実行するか、プロジェクトルートで
+`godot --path .` を実行してください。タイトルの `CLICK TO BEGIN` が音声 unlock を兼ねた
+最初のユーザー操作です。Web では、タイトル操作後に本文・選択肢・バックログ・オート・スキップ・
+終了を確認します。
+
+ローカルの `export_presets.cfg` は gitignore 対象です。次の preset で Web を書き出せます。
+
+```powershell
+godot --headless --export-release Web build/phase08_web/Build.html
+py -m http.server 8000 --bind 127.0.0.1 --directory build/phase08_web
+```
+
+preset は Compatibility / 1280x720 / `canvas_items` + `keep` / Thread 無しです。エクスポートから
+除外するのは `samples/*`、`tests/*`、`editor/*`、`import/*` の 4 パターンだけで、
+`addons/adv_kit/` 全体を除外してはいけません。
+
 ## この時点で意図的にやっていないこと
 
-- オート・本格的なスキップ・バックログ（phase-06）
-- `.tres` の書き出し（`ResourceSaver` を呼ばない）
-- 立ち絵テクスチャのインポート時検査（phase-07）
-- HTTP 取得 / GAS / エディタ Dock / CLI インポータ（phase-07）
-- `AdvScenarioBook.merge()`（章分割の運用が未決のため。仕様書 §13 U-07）
+- `AdvEffectSchema.register()`（拡張演出のスキーマ登録）。未登録 id の params は
+  文字列のまま保持されるので、実行はできる。検証を効かせたくなったときに足す
+- `AdvScenarioBook.merge()`。**章分割は行わないことに決めた**（2026-09-03。仕様書 §13 U-07）
+- `export_presets.cfg` への除外パターンの自動追加（`.gitignore` 済みのため手動。下記）
 
 ---
 
@@ -355,7 +486,7 @@ CI では 1) → 2) → 3) → 4) → 5) → 6) の順に必ず全部走らせ�
 ```text
 addons/adv_kit/
   plugin.cfg
-  adv_kit_plugin.gd          # ProjectSettings に adv_kit/import/output_dir を登録
+  adv_kit_plugin.gd          # ProjectSettings / InputMap / インポータ Dock の登録
   core/
     adv_issue.gd
     adv_parse_result.gd
@@ -387,8 +518,17 @@ addons/adv_kit/
     plain_choice_menu.tscn / .gd
     plain_backlog_view.tscn / .gd
   samples/sample_scenario.json
+  import/                    # エクスポート除外。ランタイムから参照しない
+    adv_scenario_importer.gd # 取得 + 検証 + .tres 書き出しの共通ロジック
+    adv_import_result.gd
+    adv_import_cli.gd        # extends SceneTree。--headless の実行口
+    gas/
+      adv_scenario_export.gs # GAS の doGet(e)
+      README.md              # シート構成とデプロイ手順
+  editor/                    # エクスポート除外
+    adv_import_dock.tscn / .gd
   tests/
-    test_scenario_parse.gd  test_playback.gd  test_effects.gd  test_auto_direction.gd  test_progress.gd  test_play_assist.gd
+    test_scenario_parse.gd  test_playback.gd  test_effects.gd  test_auto_direction.gd  test_progress.gd  test_play_assist.gd  test_import.gd
     assets/test_tone.tres    # テスト専用の極小 WAV（実素材の代わり）
 ```
 

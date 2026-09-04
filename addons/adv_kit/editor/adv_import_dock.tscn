@@ -1,0 +1,61 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" uid="uid://otfvtdvknwdf" path="res://addons/adv_kit/editor/adv_import_dock.gd" id="1_dock"]
+
+[node name="AdvImportDock" type="VBoxContainer"]
+offset_right = 320.0
+offset_bottom = 420.0
+theme_override_constants/separation = 4
+script = ExtResource("1_dock")
+
+[node name="UrlLabel" type="Label" parent="."]
+layout_mode = 2
+text = "GAS ウェブアプリ URL"
+
+[node name="UrlEdit" type="LineEdit" parent="."]
+layout_mode = 2
+placeholder_text = "https://script.google.com/macros/s/.../exec"
+
+[node name="OutLabel" type="Label" parent="."]
+layout_mode = 2
+text = "出力先"
+
+[node name="OutEdit" type="LineEdit" parent="."]
+layout_mode = 2
+
+[node name="ForceCheck" type="CheckBox" parent="."]
+layout_mode = 2
+text = "content_hash が一致しても書き出す"
+
+[node name="TextureCheck" type="CheckBox" parent="."]
+layout_mode = 2
+button_pressed = true
+text = "立ち絵の存在を検査する"
+
+[node name="DryRunCheck" type="CheckBox" parent="."]
+layout_mode = 2
+text = "検証のみ（書き出さない）"
+
+[node name="Buttons" type="HBoxContainer" parent="."]
+layout_mode = 2
+
+[node name="FetchButton" type="Button" parent="Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "取得して書き出し"
+
+[node name="FileButton" type="Button" parent="Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "ローカル JSON…"
+
+[node name="StatusLabel" type="Label" parent="."]
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="Log" type="RichTextLabel" parent="."]
+custom_minimum_size = Vector2(0, 220)
+layout_mode = 2
+size_flags_vertical = 3
+bbcode_enabled = true
+selection_enabled = true

@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="AdvCharacter" format=3]
+
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_portrait_set.gd" id="1_16gee"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_character.gd" id="2_rcw7u"]
+
+[sub_resource type="Resource" id="Resource_mmkh2"]
+script = ExtResource("1_16gee")
+texture_paths = Dictionary[String, String]({
+"stand/angry": "res://game/assets/adv/portraits/rin/stand_angry.png",
+"stand/normal": "res://game/assets/adv/portraits/rin/stand_normal.png"
+})
+default_pose = &"stand"
+default_expression = &"normal"
+
+[resource]
+script = ExtResource("2_rcw7u")
+id = &"rin"
+display_name = "リン"
+name_color = Color(0.62352943, 0.84705883, 1, 1)
+portrait_set = SubResource("Resource_mmkh2")

@@ -1,0 +1,122 @@
+[gd_resource type="Resource" script_class="AdvTopic" format=3]
+
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_topic.gd" id="1_3y1jp"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_step.gd" id="2_xqv5r"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_effect_step.gd" id="3_eltfd"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_line_step.gd" id="4_k7o7b"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_choice_step.gd" id="5_u0fvn"]
+
+[sub_resource type="Resource" id="Resource_35ffq"]
+script = ExtResource("3_eltfd")
+effect_id = &"play_se"
+params = {
+&"stream": "res://game/assets/adv/audio/sample_se.tres",
+&"volume_db": 0.0
+}
+sync_mode = 0
+order = 20
+uid = &"prologue_01:20"
+
+[sub_resource type="Resource" id="Resource_2qay1"]
+script = ExtResource("4_k7o7b")
+speaker_id = &"yuu"
+expression = &"smile"
+pose = &"stand"
+slot = &"center"
+text = "……ようやく着いた。"
+voice_path = "res://game/assets/adv/audio/sample_voice.tres"
+order = 10
+uid = &"prologue_01:10"
+step_index = 0
+parallel_effects = Array[ExtResource("2_xqv5r")]([SubResource("Resource_35ffq")])
+
+[sub_resource type="Resource" id="Resource_olk08"]
+script = ExtResource("4_k7o7b")
+text = "扉の向こうから、湿った空気が流れ出してくる。"
+order = 30
+uid = &"prologue_01:30"
+step_index = 1
+
+[sub_resource type="Resource" id="Resource_ikhn4"]
+script = ExtResource("3_eltfd")
+effect_id = &"play_bgm"
+params = {
+&"fade_in_time": 1.2,
+&"loop": true,
+&"stream": "res://game/assets/adv/audio/sample_bgm.tres"
+}
+sync_mode = 0
+order = 50
+uid = &"prologue_01:50"
+
+[sub_resource type="Resource" id="Resource_t7r3h"]
+script = ExtResource("3_eltfd")
+effect_id = &"shake"
+params = {
+&"duration": 0.4,
+&"frequency": 24.0,
+&"strength": 8.0
+}
+auto_advance = true
+order = 40
+uid = &"prologue_01:40"
+step_index = 2
+parallel_effects = Array[ExtResource("2_xqv5r")]([SubResource("Resource_ikhn4")])
+
+[sub_resource type="Resource" id="Resource_o0l7f"]
+script = ExtResource("4_k7o7b")
+speaker_id = &"rin"
+expression = &"angry"
+pose = &"stand"
+slot = &"left"
+text = "だから言ったでしょう。ここは崩れかけてるって。"
+order = 60
+uid = &"prologue_01:60"
+step_index = 3
+
+[sub_resource type="Resource" id="Resource_3s001"]
+script = ExtResource("3_eltfd")
+effect_id = &"show_portrait"
+params = {
+&"duration": 0.3,
+&"slot": "right",
+&"speaker": "kaze"
+}
+order = 70
+uid = &"prologue_01:70"
+step_index = 4
+
+[sub_resource type="Resource" id="Resource_v1kks"]
+script = ExtResource("4_k7o7b")
+speaker_id = &"kaze"
+slot = &"right"
+text = "……戻れ。ここは、まだ早い。"
+voice_path = "res://game/assets/adv/audio/sample_voice.tres"
+order = 80
+uid = &"prologue_01:80"
+step_index = 5
+
+[sub_resource type="Resource" id="Resource_vr58u"]
+script = ExtResource("5_u0fvn")
+prompt = "どうする？"
+options = Array[Dictionary]([{
+"condition": "",
+"flag": "chose_go",
+"goto": &"route_a",
+"label": "奥へ進む"
+}, {
+"condition": "!chose_go",
+"flag": "",
+"goto": &"route_b",
+"label": "いったん引き返す"
+}])
+order = 90
+uid = &"prologue_01:90"
+step_index = 6
+
+[resource]
+script = ExtResource("1_3y1jp")
+id = &"prologue_01"
+title = "プロローグ"
+steps = Array[ExtResource("2_xqv5r")]([SubResource("Resource_2qay1"), SubResource("Resource_olk08"), SubResource("Resource_t7r3h"), SubResource("Resource_o0l7f"), SubResource("Resource_3s001"), SubResource("Resource_v1kks"), SubResource("Resource_vr58u")])
+tags = PackedStringArray("chapter1", "entry")

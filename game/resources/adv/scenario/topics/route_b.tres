@@ -1,0 +1,65 @@
+[gd_resource type="Resource" script_class="AdvTopic" format=3]
+
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_topic.gd" id="1_osoos"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_step.gd" id="2_rpr7y"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_line_step.gd" id="3_uhn32"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_effect_step.gd" id="4_qusxp"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_jump_step.gd" id="5_qi67s"]
+
+[sub_resource type="Resource" id="Resource_2kuq2"]
+script = ExtResource("3_uhn32")
+speaker_id = &"kaze"
+slot = &"center_left"
+text = "……賢明だ。"
+order = 10
+uid = &"route_b:10"
+step_index = 0
+
+[sub_resource type="Resource" id="Resource_7j0ax"]
+script = ExtResource("4_qusxp")
+effect_id = &"play_se"
+params = {
+&"stream": "res://game/assets/adv/audio/sample_se.tres",
+&"volume_db": -6.0
+}
+sync_mode = 0
+order = 30
+uid = &"route_b:30"
+
+[sub_resource type="Resource" id="Resource_ta8jt"]
+script = ExtResource("4_qusxp")
+effect_id = &"fade_out"
+params = {
+&"color": Color(0, 0, 0, 1),
+&"duration": 0.6
+}
+auto_advance = true
+order = 20
+uid = &"route_b:20"
+step_index = 1
+parallel_effects = Array[ExtResource("2_rpr7y")]([SubResource("Resource_7j0ax")])
+
+[sub_resource type="Resource" id="Resource_m5h7x"]
+script = ExtResource("3_uhn32")
+speaker_id = &"yuu"
+expression = &"worried"
+slot = &"center_right"
+text = "……今日のところは、な。"
+voice_path = "res://game/assets/adv/audio/sample_voice.tres"
+order = 40
+uid = &"route_b:40"
+step_index = 2
+
+[sub_resource type="Resource" id="Resource_nmiq3"]
+script = ExtResource("5_qi67s")
+goto = &"epilogue_01"
+order = 50
+uid = &"route_b:50"
+step_index = 3
+
+[resource]
+script = ExtResource("1_osoos")
+id = &"route_b"
+title = "引き返す"
+steps = Array[ExtResource("2_rpr7y")]([SubResource("Resource_2kuq2"), SubResource("Resource_ta8jt"), SubResource("Resource_m5h7x"), SubResource("Resource_nmiq3")])
+tags = PackedStringArray("chapter1")

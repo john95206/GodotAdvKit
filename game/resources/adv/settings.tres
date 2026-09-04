@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="AdvKitSettings" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_kit_settings.gd" id="1_settings"]
+
+[resource]
+script = ExtResource("1_settings")
+dim_color = Color(0.42, 0.46, 0.58, 1)
+dim_duration = 0.18
+hop_height = 14.0
+hop_duration = 0.16
+typing_speed = 48.0
+auto_wait_time = 0.7
+auto_wait_for_voice = true
+skip_unread = false
+skip_interval = 0.03
+skip_stops_at_choice = true
+backlog_max_entries = 200
+backlog_voice_replay = true
+voice_bus = &"Voice"
+advance_action = &"adv_advance"
+skip_action = &"adv_skip"
+auto_action = &"adv_auto"
+backlog_action = &"adv_backlog"

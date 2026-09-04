@@ -1,0 +1,58 @@
+[gd_resource type="Resource" script_class="AdvTopic" format=3]
+
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_topic.gd" id="1_3w1nn"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_step.gd" id="2_g4pt3"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_effect_step.gd" id="3_mirrh"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_line_step.gd" id="4_wr0fd"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_jump_step.gd" id="5_u11ro"]
+
+[sub_resource type="Resource" id="Resource_uhr3l"]
+script = ExtResource("3_mirrh")
+effect_id = &"fade_in"
+params = {
+&"duration": 0.8
+}
+auto_advance = true
+order = 10
+uid = &"epilogue_01:10"
+step_index = 0
+
+[sub_resource type="Resource" id="Resource_hka1t"]
+script = ExtResource("4_wr0fd")
+speaker_id = &"yuu"
+expression = &"smile"
+slot = &"center"
+text = "また来る。今度は、灯りを持って。"
+order = 20
+uid = &"epilogue_01:20"
+step_index = 1
+
+[sub_resource type="Resource" id="Resource_btp7r"]
+script = ExtResource("4_wr0fd")
+text = "扉が、ゆっくりと閉じた。"
+order = 30
+uid = &"epilogue_01:30"
+step_index = 2
+
+[sub_resource type="Resource" id="Resource_lnymh"]
+script = ExtResource("3_mirrh")
+effect_id = &"stop_bgm"
+params = {
+&"fade_out_time": 1.0
+}
+order = 40
+uid = &"epilogue_01:40"
+step_index = 3
+
+[sub_resource type="Resource" id="Resource_kowkd"]
+script = ExtResource("5_u11ro")
+order = 50
+uid = &"epilogue_01:50"
+step_index = 4
+
+[resource]
+script = ExtResource("1_3w1nn")
+id = &"epilogue_01"
+title = "エピローグ"
+steps = Array[ExtResource("2_g4pt3")]([SubResource("Resource_uhr3l"), SubResource("Resource_hka1t"), SubResource("Resource_btp7r"), SubResource("Resource_lnymh"), SubResource("Resource_kowkd")])
+tags = PackedStringArray("chapter1")

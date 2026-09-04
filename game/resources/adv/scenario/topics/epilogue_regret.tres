@@ -1,0 +1,41 @@
+[gd_resource type="Resource" script_class="AdvTopic" format=3]
+
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_topic.gd" id="1_2q3xc"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_step.gd" id="2_xtrb5"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_line_step.gd" id="3_bf1hp"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_effect_step.gd" id="4_pqihi"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_jump_step.gd" id="5_o2d2c"]
+
+[sub_resource type="Resource" id="Resource_l7vl0"]
+script = ExtResource("3_bf1hp")
+speaker_id = &"rin"
+expression = &"normal"
+slot = &"right"
+text = "……戻ってきて、正解でしたよ。"
+order = 10
+uid = &"epilogue_regret:10"
+step_index = 0
+
+[sub_resource type="Resource" id="Resource_rt1k6"]
+script = ExtResource("4_pqihi")
+effect_id = &"stop_bgm"
+params = {
+&"fade_out_time": 1.0
+}
+auto_advance = true
+order = 20
+uid = &"epilogue_regret:20"
+step_index = 1
+
+[sub_resource type="Resource" id="Resource_wxkx6"]
+script = ExtResource("5_o2d2c")
+order = 30
+uid = &"epilogue_regret:30"
+step_index = 2
+
+[resource]
+script = ExtResource("1_2q3xc")
+id = &"epilogue_regret"
+title = "エピローグ（引き返した場合）"
+steps = Array[ExtResource("2_xtrb5")]([SubResource("Resource_l7vl0"), SubResource("Resource_rt1k6"), SubResource("Resource_wxkx6")])
+tags = PackedStringArray("chapter1")

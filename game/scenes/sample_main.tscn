@@ -1,0 +1,241 @@
+[gd_scene load_steps=18 format=3]
+
+[ext_resource type="Script" path="res://game/scripts/sample_main.gd" id="1_main"]
+[ext_resource type="PackedScene" path="res://game/scenes/sample_adv_scene.tscn" id="2_adv_scene"]
+[ext_resource type="Theme" path="res://game/ui/sample_theme.tres" id="3_theme"]
+[ext_resource type="Resource" path="res://game/resources/adv/scenario/scenario_book.tres" id="4_book"]
+[ext_resource type="Resource" path="res://game/resources/adv/settings.tres" id="5_settings"]
+[ext_resource type="AudioStream" path="res://game/assets/adv/audio/sample_bgm.tres" id="6_bgm"]
+[ext_resource type="AudioStream" path="res://game/assets/adv/audio/sample_voice.tres" id="7_voice"]
+[ext_resource type="AudioStream" path="res://game/assets/adv/audio/sample_se.tres" id="8_se"]
+[ext_resource type="Texture2D" path="res://game/assets/adv/portraits/yuu/stand_normal.png" id="9_yuu_normal"]
+[ext_resource type="Texture2D" path="res://game/assets/adv/portraits/yuu/stand_smile.png" id="10_yuu_smile"]
+[ext_resource type="Texture2D" path="res://game/assets/adv/portraits/yuu/stand_worried.png" id="11_yuu_worried"]
+[ext_resource type="Texture2D" path="res://game/assets/adv/portraits/yuu/arms_crossed_normal.png" id="12_yuu_arms"]
+[ext_resource type="Texture2D" path="res://game/assets/adv/portraits/yuu/arms_crossed_smile.png" id="13_yuu_arms_smile"]
+[ext_resource type="Texture2D" path="res://game/assets/adv/portraits/yuu/arms_crossed_worried.png" id="14_yuu_arms_worried"]
+[ext_resource type="Texture2D" path="res://game/assets/adv/portraits/rin/stand_normal.png" id="15_rin_normal"]
+[ext_resource type="Texture2D" path="res://game/assets/adv/portraits/rin/stand_angry.png" id="16_rin_angry"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_overlay"]
+bg_color = Color(0.02, 0.035, 0.08, 0.96)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.27, 0.74, 0.82, 0.75)
+corner_radius_top_left = 18
+corner_radius_top_right = 18
+corner_radius_bottom_right = 18
+corner_radius_bottom_left = 18
+shadow_color = Color(0, 0, 0, 0.55)
+shadow_size = 20
+
+[node name="SampleMain" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_main")
+theme = ExtResource("3_theme")
+book = ExtResource("4_book")
+settings = ExtResource("5_settings")
+sample_assets = Array[Resource]([ExtResource("6_bgm"), ExtResource("7_voice"), ExtResource("8_se"), ExtResource("9_yuu_normal"), ExtResource("10_yuu_smile"), ExtResource("11_yuu_worried"), ExtResource("12_yuu_arms"), ExtResource("13_yuu_arms_smile"), ExtResource("14_yuu_arms_worried"), ExtResource("15_rin_normal"), ExtResource("16_rin_angry")])
+
+[node name="AdvScene" parent="." instance=ExtResource("2_adv_scene")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Hud" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Brand" type="Label" parent="Hud"]
+layout_mode = 0
+offset_left = 34.0
+offset_top = 24.0
+offset_right = 340.0
+offset_bottom = 62.0
+theme_override_colors/font_color = Color(0.91, 0.96, 1, 0.94)
+theme_override_font_sizes/font_size = 22
+text = "ADV KIT  /  SAMPLE"
+
+[node name="Status" type="Label" parent="Hud"]
+layout_mode = 0
+offset_left = 36.0
+offset_top = 62.0
+offset_right = 360.0
+offset_bottom = 88.0
+theme_override_colors/font_color = Color(0.42, 0.82, 0.88, 0.9)
+theme_override_font_sizes/font_size = 14
+text = "TITLE / READY"
+
+[node name="Mode" type="Label" parent="Hud"]
+layout_mode = 0
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -210.0
+offset_top = 28.0
+offset_right = -36.0
+offset_bottom = 60.0
+theme_override_colors/font_color = Color(1, 0.82, 0.45, 1)
+theme_override_font_sizes/font_size = 18
+text = ""
+horizontal_alignment = 2
+
+[node name="Help" type="Label" parent="Hud"]
+layout_mode = 0
+anchor_left = 0.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -38.0
+offset_bottom = -12.0
+theme_override_colors/font_color = Color(0.76, 0.84, 0.94, 0.72)
+theme_override_font_sizes/font_size = 13
+text = "CLICK / SPACE  ADVANCE     A  AUTO     CTRL  SKIP     B  BACKLOG"
+horizontal_alignment = 1
+
+[node name="TitleOverlay" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+
+[node name="Dim" type="ColorRect" parent="TitleOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.015, 0.025, 0.07, 0.48)
+
+[node name="Panel" type="PanelContainer" parent="TitleOverlay"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.28
+anchor_top = 0.22
+anchor_right = 0.72
+anchor_bottom = 0.7
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_overlay")
+
+[node name="Margin" type="MarginContainer" parent="TitleOverlay/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 42
+theme_override_constants/margin_top = 38
+theme_override_constants/margin_right = 42
+theme_override_constants/margin_bottom = 38
+
+[node name="Content" type="VBoxContainer" parent="TitleOverlay/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="Kicker" type="Label" parent="TitleOverlay/Panel/Margin/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.42, 0.82, 0.88, 1)
+theme_override_font_sizes/font_size = 16
+text = "A SMALL SCENARIO PIPELINE DEMO"
+horizontal_alignment = 1
+
+[node name="Title" type="Label" parent="TitleOverlay/Panel/Margin/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.97, 1, 1)
+theme_override_font_sizes/font_size = 38
+text = "THE DOOR IN THE MIST"
+horizontal_alignment = 1
+
+[node name="Description" type="Label" parent="TitleOverlay/Panel/Margin/Content"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_colors/font_color = Color(0.76, 0.84, 0.94, 0.92)
+theme_override_font_sizes/font_size = 17
+text = "A compact showcase of portraits, choices,\nlocal effects, voice, backlog and autoplay safety."
+horizontal_alignment = 1
+
+[node name="StartButton" type="Button" parent="TitleOverlay/Panel/Margin/Content"]
+custom_minimum_size = Vector2(0, 54)
+layout_mode = 2
+focus_mode = 1
+theme_override_font_sizes/font_size = 20
+text = "CLICK TO BEGIN"
+
+[node name="EndOverlay" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+visible = false
+
+[node name="Dim" type="ColorRect" parent="EndOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.015, 0.025, 0.07, 0.6)
+
+[node name="Panel" type="PanelContainer" parent="EndOverlay"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.34
+anchor_top = 0.33
+anchor_right = 0.66
+anchor_bottom = 0.64
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_overlay")
+
+[node name="Margin" type="MarginContainer" parent="EndOverlay/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 30
+theme_override_constants/margin_top = 28
+theme_override_constants/margin_right = 30
+theme_override_constants/margin_bottom = 28
+
+[node name="Content" type="VBoxContainer" parent="EndOverlay/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Title" type="Label" parent="EndOverlay/Panel/Margin/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.86, 0.62, 1)
+theme_override_font_sizes/font_size = 28
+text = "SCENARIO COMPLETE"
+horizontal_alignment = 1
+
+[node name="Caption" type="Label" parent="EndOverlay/Panel/Margin/Content"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_colors/font_color = Color(0.76, 0.84, 0.94, 0.9)
+theme_override_font_sizes/font_size = 16
+text = "The sample route has reached its end."
+horizontal_alignment = 1
+
+[node name="RestartButton" type="Button" parent="EndOverlay/Panel/Margin/Content"]
+custom_minimum_size = Vector2(0, 46)
+layout_mode = 2
+focus_mode = 1
+text = "PLAY AGAIN"

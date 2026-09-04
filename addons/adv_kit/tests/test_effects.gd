@@ -328,7 +328,7 @@ func _test_audio_guard_and_director() -> void:
 	_check(not audio.is_bgm_playing(), "存在しない BGM は鳴らない")
 
 	audio.play_bgm(TONE_PATH, 0.0, true)
-	await process_frame
+	await _wait_until_bgm_playing(audio)
 	_check(audio.is_bgm_playing(), "BGM が再生される")
 	_check(audio.current_bgm_path() == TONE_PATH, "現在の BGM パスが記録される")
 
@@ -346,6 +346,39 @@ func _test_audio_guard_and_director() -> void:
 		await process_frame
 		guard += 1
 	_check(not audio.is_bgm_playing(), "クロスフェード中に stop_bgm しても全チャンネルが止まる")
+
+	# U-08（B 案・2026-09-03 確定）: スキップで stop_bgm を飛ばしても BGM を残さない。
+	# apply_final() は play_se / play_bgm では何もせず、stop_bgm だけ即座に止める。
+	var audio_ctx: AdvEffectContext = _player.get_effect_context()
+	audio.play_bgm(TONE_PATH, 0.0, true)
+	await _wait_until_bgm_playing(audio)
+	_check(audio.is_bgm_playing(), "U-08 の前提として BGM が鳴っている")
+
+	var play_bgm_handler := AdvAudioEffect.new()
+	play_bgm_handler.effect_id = &"play_bgm"
+	play_bgm_handler.apply_final(audio_ctx, {&"stream": TONE_PATH})
+	await process_frame
+	_check(
+		audio.current_bgm_path() == TONE_PATH,
+		"play_bgm の apply_final() は何もしない（スキップ中に音を鳴らさない）")
+
+	var se_count_before: int = audio.se_request_count()
+	var play_se_handler := AdvAudioEffect.new()
+	play_se_handler.effect_id = &"play_se"
+	play_se_handler.apply_final(audio_ctx, {&"stream": TONE_PATH})
+	_check(
+		audio.se_request_count() == se_count_before,
+		"play_se の apply_final() は何もしない")
+
+	var stop_handler := AdvAudioEffect.new()
+	stop_handler.effect_id = &"stop_bgm"
+	# fade_out_time が指定されていても即座に止める（スキップは速度優先）。
+	stop_handler.apply_final(audio_ctx, {&"fade_out_time": 2.0})
+	await process_frame
+	_check(
+		not audio.is_bgm_playing(),
+		"stop_bgm の apply_final() は fade_out_time を無視して即座に止める")
+	_check(audio.current_bgm_path().is_empty(), "apply_final() の後は BGM パスが空になる")
 
 	audio.stop_all()
 	await process_frame
@@ -605,6 +638,13 @@ func _run_effect(
 func _wait_until(p_flag: Array, p_max_frames: int) -> void:
 	var frames: int = 0
 	while not p_flag[0] and frames < p_max_frames:
+		await process_frame
+		frames += 1
+
+
+func _wait_until_bgm_playing(p_audio: AdvAudioDirector, p_max_frames: int = 8) -> void:
+	var frames: int = 0
+	while not p_audio.is_bgm_playing() and frames < p_max_frames:
 		await process_frame
 		frames += 1
 

@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="AdvCharacter" format=3]
+
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_portrait_set.gd" id="1_53dn4"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_character.gd" id="2_7omxr"]
+
+[sub_resource type="Resource" id="Resource_l3soa"]
+script = ExtResource("1_53dn4")
+texture_paths = Dictionary[String, String]({
+"arms_crossed/normal": "res://game/assets/adv/portraits/yuu/arms_crossed_normal.png",
+"arms_crossed/smile": "res://game/assets/adv/portraits/yuu/arms_crossed_smile.png",
+"arms_crossed/worried": "res://game/assets/adv/portraits/yuu/arms_crossed_worried.png",
+"stand/normal": "res://game/assets/adv/portraits/yuu/stand_normal.png",
+"stand/smile": "res://game/assets/adv/portraits/yuu/stand_smile.png",
+"stand/worried": "res://game/assets/adv/portraits/yuu/stand_worried.png"
+})
+default_pose = &"stand"
+default_expression = &"normal"
+
+[resource]
+script = ExtResource("2_7omxr")
+id = &"yuu"
+display_name = "ユウ"
+name_color = Color(1, 0.8235294, 0.49803922, 1)
+portrait_set = SubResource("Resource_l3soa")

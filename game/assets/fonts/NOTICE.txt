@@ -1,0 +1,6 @@
+NotoSansJP-VF.ttf
+
+This font is Noto Sans JP, distributed under the SIL Open Font License, Version 1.1.
+The font is bundled so the Web sample renders Japanese text consistently instead of relying
+on the browser's platform-dependent fallback font. Preserve the upstream license terms when
+redistributing the sample.

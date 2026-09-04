@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="AdvScenarioBook" format=3]
+
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_character.gd" id="1_fcw87"]
+[ext_resource type="Resource" path="res://game/resources/adv/scenario/characters/yuu.tres" id="2_qpuuy"]
+[ext_resource type="Resource" path="res://game/resources/adv/scenario/characters/rin.tres" id="3_bmo8w"]
+[ext_resource type="Resource" path="res://game/resources/adv/scenario/characters/kaze.tres" id="4_ygrnr"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_scenario_book.gd" id="5_xhnis"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_topic.gd" id="6_i5mc2"]
+[ext_resource type="Resource" path="res://game/resources/adv/scenario/topics/prologue_01.tres" id="7_mc17t"]
+[ext_resource type="Resource" path="res://game/resources/adv/scenario/topics/route_a.tres" id="8_mcenk"]
+[ext_resource type="Resource" path="res://game/resources/adv/scenario/topics/route_b.tres" id="9_myilk"]
+[ext_resource type="Resource" path="res://game/resources/adv/scenario/topics/epilogue_01.tres" id="10_w3toi"]
+
+[resource]
+script = ExtResource("5_xhnis")
+topics = Dictionary[StringName, ExtResource("6_i5mc2")]({
+&"epilogue_01": ExtResource("10_w3toi"),
+&"prologue_01": ExtResource("7_mc17t"),
+&"route_a": ExtResource("8_mcenk"),
+&"route_b": ExtResource("9_myilk")
+})
+characters = Dictionary[StringName, ExtResource("1_fcw87")]({
+&"kaze": ExtResource("4_ygrnr"),
+&"rin": ExtResource("3_bmo8w"),
+&"yuu": ExtResource("2_qpuuy")
+})
+schema_version = 1
+content_hash = "sample-phase08-0001"

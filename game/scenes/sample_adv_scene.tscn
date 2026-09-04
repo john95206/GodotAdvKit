@@ -1,0 +1,92 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://addons/adv_kit/ui/adv_scene.gd" id="1_scene"]
+[ext_resource type="Script" path="res://addons/adv_kit/ui/adv_stage.gd" id="2_stage"]
+[ext_resource type="Script" path="res://addons/adv_kit/runtime/adv_player.gd" id="3_player"]
+[ext_resource type="Texture2D" path="res://game/assets/adv/backgrounds/sample_ruins.png" id="4_background"]
+[ext_resource type="PackedScene" path="res://game/ui/sample_message_window.tscn" id="5_message"]
+[ext_resource type="PackedScene" path="res://game/ui/sample_choice_menu.tscn" id="6_choice"]
+[ext_resource type="PackedScene" path="res://game/ui/sample_backlog_view.tscn" id="7_backlog"]
+
+[node name="SampleAdvScene" type="Control" node_paths=PackedStringArray("player")]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_scene")
+player = NodePath("AdvPlayer")
+
+[node name="ShakeRoot" type="Control" parent="."]
+layout_mode = 0
+offset_right = 0.0
+offset_bottom = 0.0
+mouse_filter = 2
+
+[node name="Background" type="TextureRect" parent="ShakeRoot"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("4_background")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="Stage" type="Control" parent="ShakeRoot"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("2_stage")
+
+[node name="FadeLayer" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 0)
+
+[node name="MessageWindow" parent="." instance=ExtResource("5_message")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ChoiceMenu" parent="." instance=ExtResource("6_choice")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="BacklogView" parent="." instance=ExtResource("7_backlog")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="AdvPlayer" type="Node" parent="." node_paths=PackedStringArray("stage", "message_window", "choice_menu", "backlog_view", "shake_root", "fade_layer")]
+layout_mode = 0
+script = ExtResource("3_player")
+stage = NodePath("../ShakeRoot/Stage")
+message_window = NodePath("../MessageWindow")
+choice_menu = NodePath("../ChoiceMenu")
+backlog_view = NodePath("../BacklogView")
+shake_root = NodePath("../ShakeRoot")
+fade_layer = NodePath("../FadeLayer")

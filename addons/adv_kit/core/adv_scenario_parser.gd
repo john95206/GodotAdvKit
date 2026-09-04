@@ -54,6 +54,10 @@ static func parse(p_json_data: Dictionary) -> AdvParseResult:
 	var result := AdvParseResult.new()
 	var book := AdvScenarioBook.new()
 	result.book = book
+	# 仕様書 §4.5。欠落や型違いは 0 / 空文字にする（issue は立てない。
+	# schema_version の互換判定はインポータの仕事であって、パースは通す）。
+	book.schema_version = _read_int(p_json_data, "schema_version")
+	book.content_hash = _get_string(p_json_data, "content_hash").strip_edges()
 	_parse_characters(p_json_data, book, result)
 	_parse_topics(p_json_data, book, result)
 	return result
@@ -294,6 +298,20 @@ static func _read_order(p_raw: Dictionary) -> int:
 		if text.is_valid_int():
 			return text.to_int()
 	return ORDER_INVALID
+
+
+## 整数として読む。読めなければ 0。schema_version など「欠落を許す」項目に使う。
+static func _read_int(p_dict: Dictionary, p_key: String) -> int:
+	var value: Variant = p_dict.get(p_key, null)
+	if value is int:
+		return value
+	if value is float:
+		return int(roundf(value as float))
+	if value is String:
+		var text: String = (value as String).strip_edges()
+		if text.is_valid_int():
+			return text.to_int()
+	return 0
 
 
 static func _as_dict(p_value: Variant) -> Dictionary:

@@ -1,0 +1,68 @@
+[gd_resource type="Resource" script_class="AdvTopic" format=3]
+
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_topic.gd" id="1_v585c"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_step.gd" id="2_rqlua"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_line_step.gd" id="3_5p6d1"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_effect_step.gd" id="4_48myh"]
+[ext_resource type="Script" path="res://addons/adv_kit/resources/adv_jump_step.gd" id="5_3ygov"]
+
+[sub_resource type="Resource" id="Resource_lvqec"]
+script = ExtResource("3_5p6d1")
+speaker_id = &"yuu"
+expression = &"smile"
+slot = &"center"
+text = "ここまで来て、引き返せるものか。"
+voice_path = "res://game/assets/adv/audio/sample_voice.tres"
+order = 10
+uid = &"route_a:10"
+step_index = 0
+
+[sub_resource type="Resource" id="Resource_h1p8k"]
+script = ExtResource("4_48myh")
+effect_id = &"shake"
+params = {
+&"duration": 0.4,
+&"frequency": 18.0,
+&"strength": 4.0
+}
+sync_mode = 0
+order = 30
+uid = &"route_a:30"
+
+[sub_resource type="Resource" id="Resource_dygff"]
+script = ExtResource("4_48myh")
+effect_id = &"move_portrait"
+params = {
+&"duration": 0.6,
+&"ease": "out",
+&"speaker": "yuu",
+&"to_slot": "left"
+}
+order = 20
+uid = &"route_a:20"
+step_index = 1
+parallel_effects = Array[ExtResource("2_rqlua")]([SubResource("Resource_h1p8k")])
+
+[sub_resource type="Resource" id="Resource_d5lex"]
+script = ExtResource("3_5p6d1")
+speaker_id = &"rin"
+expression = &"normal"
+slot = &"right"
+text = "……もう。知りませんからね。"
+order = 40
+uid = &"route_a:40"
+step_index = 2
+
+[sub_resource type="Resource" id="Resource_12xrw"]
+script = ExtResource("5_3ygov")
+goto = &"epilogue_01"
+order = 50
+uid = &"route_a:50"
+step_index = 3
+
+[resource]
+script = ExtResource("1_v585c")
+id = &"route_a"
+title = "奥へ進む"
+steps = Array[ExtResource("2_rqlua")]([SubResource("Resource_lvqec"), SubResource("Resource_dygff"), SubResource("Resource_d5lex"), SubResource("Resource_12xrw")])
+tags = PackedStringArray("chapter1")
